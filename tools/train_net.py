@@ -39,7 +39,7 @@ def train_epoch(train_loader, model, optimizer, train_meter, cur_epoch, cfg):
     # Enable train mode.
     model.train()
     if cfg.BN.FREEZE:
-        model.module.freeze_fn('bn_statistics')
+        model.freeze_fn('bn_statistics')
 
     train_meter.iter_tic()
     data_size = len(train_loader)
@@ -55,12 +55,12 @@ def train_epoch(train_loader, model, optimizer, train_meter, cur_epoch, cfg):
             labels = {k: v.cuda() for k, v in labels.items()}
         else:
             labels = labels.cuda()
-        for key, val in meta.items():
-            if isinstance(val, (list,)):
-                for i in range(len(val)):
-                    val[i] = val[i].cuda(non_blocking=True)
-            else:
-                meta[key] = val.cuda(non_blocking=True)
+        # for key, val in meta.items():
+        #     if isinstance(val, (list,)):
+        #         for i in range(len(val)):
+        #             val[i] = val[i].cuda(non_blocking=True)
+        #     else:
+        #         meta[key] = val.cuda(non_blocking=True)
 
         # Update the learning rate.
         lr = optim.get_epoch_lr(cur_epoch + float(cur_iter) / data_size, cfg)
@@ -364,7 +364,7 @@ def train(cfg):
         misc.log_model_info(model, cfg, is_train=True)
 
     if cfg.BN.FREEZE:
-        model.module.freeze_fn('bn_parameters')
+        model.freeze_fn('bn_parameters')
 
     # Construct the optimizer.
     optimizer = optim.construct_optimizer(model, cfg)
