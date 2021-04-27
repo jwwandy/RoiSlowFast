@@ -66,7 +66,9 @@ DATA_LOADER:
   PIN_MEMORY: True
 EPICKITCHENS:
   TRAIN_PLUS_VAL: False
-  ANNOTATIONS_DIR: '/home/xiaoyuz1/epic-kitchens-100-annotations'
+  ANNOTATIONS_DIR: '/raid/xiaoyuz1/EPIC/epic-annotations'
+  TRAIN_LIST: "EPIC_100_validation_P32_01.pkl"
+  VISUAL_DATA_DIR: '/raid/xiaoyuz1/EPIC/EPIC-KITCHENS'
 NUM_GPUS: 1
 NUM_SHARDS: 1
 RNG_SEED: 0
