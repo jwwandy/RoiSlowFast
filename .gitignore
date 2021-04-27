@@ -9,3 +9,5 @@ submit_jobs_jade_*.py
 /slowfast_*/
 /experiments/
 /scores/
+*.ipynb
+.ipynb_checkpoints/

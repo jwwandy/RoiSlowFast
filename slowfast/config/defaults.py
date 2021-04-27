@@ -2,7 +2,30 @@
 # Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved.
 
 """Configs."""
-from fvcore.common.config import CfgNode
+# from fvcore.common.config import CfgNode
+import yaml 
+import copy
+class CfgNode(object):
+    def __init__(self, cfg=None):
+        if cfg is not None:
+            for k, v in cfg.items():
+                if isinstance(v, dict):
+                    setattr(self, k, CfgNode(v))
+                else:
+                    setattr(self, k, v)
+
+    def update(self, cfg):
+        for k, v in cfg.items():
+            if isinstance(v, dict):
+                if hasattr(self, k):
+                    if isinstance(getattr(self, k), CfgNode):
+                        getattr(self, k).update(v)
+                    else:
+                        raise TypeError("Previously not dict but update with dict")
+                else:
+                    setattr(self, k, CfgNode(v))
+            else:
+                setattr(self, k, v)
 
 # -----------------------------------------------------------------------------
 # Config definition
@@ -480,8 +503,14 @@ def _assert_and_infer_cfg(cfg):
     return cfg
 
 
+# def get_cfg():
+#     """
+#     Get a copy of the default config.
+#     """
+#     return _assert_and_infer_cfg(_C.clone())
+
 def get_cfg():
     """
     Get a copy of the default config.
     """
-    return _assert_and_infer_cfg(_C.clone())
+    return copy.deepcopy(_C)
