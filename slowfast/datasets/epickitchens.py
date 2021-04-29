@@ -66,6 +66,10 @@ class Epickitchens(torch.utils.data.Dataset):
         self._spatial_temporal_idx = []
         for file in path_annotations_pickle:
             for tup in pd.read_pickle(file).iterrows():
+                tup_record = EpicKitchensVideoRecord(tup)
+                if not (tup_record.num_frames >= self.cfg.EPICKITCHENS.SEGMENT_MIN_LENGTH and \
+                    tup_record.num_frames >= self.cfg.EPICKITCHENS.SEGMENT_MAX_LENGTH):
+                    continue
                 for idx in range(self._num_clips):
                     self._video_records.append(EpicKitchensVideoRecord(tup))
                     self._spatial_temporal_idx.append(idx)

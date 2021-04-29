@@ -2,30 +2,30 @@
 # Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved.
 
 """Configs."""
-# from fvcore.common.config import CfgNode
+from fvcore.common.config import CfgNode
 import yaml 
 import copy
-class CfgNode(object):
-    def __init__(self, cfg=None):
-        if cfg is not None:
-            for k, v in cfg.items():
-                if isinstance(v, dict):
-                    setattr(self, k, CfgNode(v))
-                else:
-                    setattr(self, k, v)
+# class CfgNode(object):
+#     def __init__(self, cfg=None):
+#         if cfg is not None:
+#             for k, v in cfg.items():
+#                 if isinstance(v, dict):
+#                     setattr(self, k, CfgNode(v))
+#                 else:
+#                     setattr(self, k, v)
 
-    def update(self, cfg):
-        for k, v in cfg.items():
-            if isinstance(v, dict):
-                if hasattr(self, k):
-                    if isinstance(getattr(self, k), CfgNode):
-                        getattr(self, k).update(v)
-                    else:
-                        raise TypeError("Previously not dict but update with dict")
-                else:
-                    setattr(self, k, CfgNode(v))
-            else:
-                setattr(self, k, v)
+#     def update(self, cfg):
+#         for k, v in cfg.items():
+#             if isinstance(v, dict):
+#                 if hasattr(self, k):
+#                     if isinstance(getattr(self, k), CfgNode):
+#                         getattr(self, k).update(v)
+#                     else:
+#                         raise TypeError("Previously not dict but update with dict")
+#                 else:
+#                     setattr(self, k, CfgNode(v))
+#             else:
+#                 setattr(self, k, v)
 
 # -----------------------------------------------------------------------------
 # Config definition
@@ -477,8 +477,20 @@ _C.EPICKITCHENS.TEST_LIST = "EPIC_100_validation.pkl"
 
 _C.EPICKITCHENS.TEST_SPLIT = "validation"
 
+_C.EPICKITCHENS.TRAIN_VIDEO_ID = []
+_C.EPICKITCHENS.TRAIN_P_ID = []
+
+_C.EPICKITCHENS.VAL_VIDEO_ID = []
+_C.EPICKITCHENS.VAL_P_ID = []
+
+_C.EPICKITCHENS.TEST_VIDEO_ID = []
+_C.EPICKITCHENS.TEST_P_ID = []
+
 _C.EPICKITCHENS.TRAIN_PLUS_VAL = False
 
+_C.EPICKITCHENS.SEGMENT_MIN_LENGTH = 1
+
+_C.EPICKITCHENS.SEGMENT_MAX_LENGTH = 64
 
 def _assert_and_infer_cfg(cfg):
     # BN assertions.
@@ -503,14 +515,14 @@ def _assert_and_infer_cfg(cfg):
     return cfg
 
 
-# def get_cfg():
-#     """
-#     Get a copy of the default config.
-#     """
-#     return _assert_and_infer_cfg(_C.clone())
-
 def get_cfg():
     """
     Get a copy of the default config.
     """
-    return copy.deepcopy(_C)
+    return _assert_and_infer_cfg(_C.clone())
+
+# def get_cfg():
+#     """
+#     Get a copy of the default config.
+#     """
+#     return copy.deepcopy(_C)

@@ -1,0 +1,3 @@
+PYTHONPATH=/home/xiaoyuz1/epic-slow-fast python tools/run_net.py --cfg test_config.yaml NUM_GPUS 1 OUTPUT_DIR /raid/xiaoyuz1/EPIC/slowfast_experiment EPICKITCHENS.VISUAL_DATA_DIR /raid/xiaoyuz1/EPIC/EPIC-KITCHENS EPICKITCHENS.ANNOTATIONS_DIR /raid/xiaoyuz1/EPIC/epic-annotations TRAIN.ENABLE False TEST.ENABLE True TEST.CHECKPOINT_FILE_PATH /raid/xiaoyuz1/EPIC/SlowFast.pyth
+
+PYTHONPATH=/home/xiaoyuz1/epic-slow-fast python tools/run_net.py --cfg test_config.yaml NUM_GPUS 1 OUTPUT_DIR /raid/xiaoyuz1/EPIC/slowfast_experiment/P02_01 EPICKITCHENS.VISUAL_DATA_DIR /raid/xiaoyuz1/EPIC/EPIC-KITCHENS EPICKITCHENS.ANNOTATIONS_DIR /raid/xiaoyuz1/EPIC/epic-annotations TRAIN.ENABLE False TEST.ENABLE True TEST.CHECKPOINT_FILE_PATH /raid/xiaoyuz1/EPIC/SlowFast.pyth
