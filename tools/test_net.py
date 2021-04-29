@@ -227,6 +227,13 @@ def test(cfg):
             )
 
     # # Perform multi-view test on the entire dataset.
+    scores_path = os.path.join(cfg.OUTPUT_DIR, 'scores')
+    if not os.path.exists(scores_path):
+        os.makedirs(scores_path)
+    file_name = 'P{:02d}_{}'.format(int(cfg.EPICKITCHENS.PARTICIPANT_ID), cfg.EPICKITCHENS.TEST_SPLIT)
+    file_path = os.path.join(scores_path, file_name + '.pkl')
+    print(scores_path, file_name)
+    pickle.dump([], open(file_path, 'wb+'))
     preds, labels, metadata = perform_test(test_loader, model, test_meter, cfg)
 
     if du.is_master_proc():
@@ -237,5 +244,8 @@ def test(cfg):
             scores_path = os.path.join(cfg.OUTPUT_DIR, 'scores')
             if not os.path.exists(scores_path):
                 os.makedirs(scores_path)
-            file_path = os.path.join(scores_path, cfg.EPICKITCHENS.TEST_SPLIT + '.pkl')
+            file_name = 'P{0:02d}_{}'.format(cfg.EPICKITCHENS.PARTICIPANT_ID, cfg.EPICKITCHENS.TEST_SPLIT)
+            file_path = os.path.join(scores_path, file_name + '.pkl')
             pickle.dump(results, open(file_path, 'wb'))
+
+            print(scores_path, file_name)

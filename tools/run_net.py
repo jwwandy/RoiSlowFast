@@ -10,6 +10,7 @@ import yaml
 import slowfast.utils.checkpoint as cu
 import slowfast.utils.multiprocessing as mpu
 from slowfast.config.defaults import get_cfg
+# from detectron2.config import get_cfg
 
 from test_net import test
 from train_net import train
@@ -76,34 +77,34 @@ def load_config(args):
     return cfg
 
 
-# def load_config(args):
-#     """
-#     Given the arguemnts, load and initialize the configs.
-#     Args:
-#         args (argument): arguments includes `shard_id`, `num_shards`,
-#             `init_method`, `cfg_file`, and `opts`.
-#     """
-#     # Setup cfg.
-#     cfg = get_cfg()
-#     # Load config from cfg.
-#     if args.cfg_file is not None:
-#         cfg.merge_from_file(args.cfg_file)
-#     # Load config from command line, overwrite config from opts.
-#     if args.opts is not None:
-#         cfg.merge_from_list(args.opts)
+def load_config(args):
+    """
+    Given the arguemnts, load and initialize the configs.
+    Args:
+        args (argument): arguments includes `shard_id`, `num_shards`,
+            `init_method`, `cfg_file`, and `opts`.
+    """
+    # Setup cfg.
+    cfg = get_cfg()
+    # Load config from cfg.
+    if args.cfg_file is not None:
+        cfg.merge_from_file(args.cfg_file)
+    # Load config from command line, overwrite config from opts.
+    if args.opts is not None:
+        cfg.merge_from_list(args.opts)
 
-#     # Inherit parameters from args.
-#     if hasattr(args, "num_shards") and hasattr(args, "shard_id"):
-#         cfg.NUM_SHARDS = args.num_shards
-#         cfg.SHARD_ID = args.shard_id
-#     if hasattr(args, "rng_seed"):
-#         cfg.RNG_SEED = args.rng_seed
-#     if hasattr(args, "output_dir"):
-#         cfg.OUTPUT_DIR = args.output_dir
+    # Inherit parameters from args.
+    if hasattr(args, "num_shards") and hasattr(args, "shard_id"):
+        cfg.NUM_SHARDS = args.num_shards
+        cfg.SHARD_ID = args.shard_id
+    if hasattr(args, "rng_seed"):
+        cfg.RNG_SEED = args.rng_seed
+    if hasattr(args, "output_dir"):
+        cfg.OUTPUT_DIR = args.output_dir
 
-#     # Create the checkpoint dir.
-#     cu.make_checkpoint_dir(cfg.OUTPUT_DIR)
-#     return cfg
+    # Create the checkpoint dir.
+    cu.make_checkpoint_dir(cfg.OUTPUT_DIR)
+    return cfg
 
 
 def main():
@@ -114,6 +115,7 @@ def main():
     cfg = load_config(args)
 
     # Perform training.
+    print("Number of GPUS: ", cfg.NUM_GPUS)
     if cfg.TRAIN.ENABLE:
         if cfg.NUM_GPUS > 1:
             torch.multiprocessing.spawn(

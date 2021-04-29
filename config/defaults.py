@@ -456,8 +456,6 @@ _C.EPICKITCHENS.TEST_SPLIT = "validation"
 
 _C.EPICKITCHENS.TRAIN_PLUS_VAL = False
 
-_C.EPICKITCHENS.PARTICIPANT_ID = 0
-
 
 def _assert_and_infer_cfg(cfg):
     # BN assertions.
