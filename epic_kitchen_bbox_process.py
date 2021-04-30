@@ -1,0 +1,135 @@
+import pandas as pd 
+import numpy as np
+import os 
+import argparse
+import sys
+import torch
+import pickle
+import slowfast.utils.checkpoint as cu
+import slowfast.utils.multiprocessing as mpu
+from slowfast.config.defaults import get_cfg
+from slowfast.datasets.epickitchens_record import EpicKitchensVideoRecord
+from slowfast.datasets.epic_kitchens_bbox.hoa import load_detections, DetectionRenderer
+from tqdm import tqdm
+from slowfast.datasets.epickitchens_bbox import load_all_bbox
+
+parser = argparse.ArgumentParser(add_help=True)
+parser.add_argument('--annotations_dir', type=str)
+parser.add_argument('--visual_data_dir', type=str)
+parser.add_argument('--bbox_annotations_dir', type=str)
+parser.add_argument('--anno_format', type=str)
+
+parser.add_argument('--object', type=int, default=1)
+parser.add_argument('--active_object', type=int, default=0)
+parser.add_argument('--hand', type=int, default=1)
+# parser.add_argument('--hand_threshold', type=int, default=1)
+# parser.add_argument('--object_threshold', type=int, default=1)
+
+parser.add_argument('--pid', type=str)
+
+args = parser.parse_args()
+
+'''
+python epic_kitchen_bbox_process.py --annotations_dir '/raid/xiaoyuz1/EPIC/epic-annotations' --visual_data_dir '/raid/xiaoyuz1/EPIC/EPIC-KITCHENS' --bbox_annotations_dir '/raid/xiaoyuz1/EPIC/epic-bbox-annotations/all' --anno_format 'annotations_{}.pkl' --pid P01
+'''
+
+# os.path.join(args.annotations_dir, 'EPIC_100_train.pkl')
+# pkl_train = pd.read_pickle('/home/xiaoyuz1/epic-kitchens-100-annotations/EPIC_100_train.pkl')
+# pkl_val = pd.read_pickle('/home/xiaoyuz1/epic-kitchens-100-annotations/EPIC_100_validation.pkl')
+
+
+# 'annotations_train_{}.pkl'
+def process(pid):
+    formatter = args.anno_format
+    path_to_records = os.path.join(args.annotations_dir, formatter.format(pid))
+    video_records = []
+    for tup in pd.read_pickle(path_to_records).iterrows():
+        tup_record = EpicKitchensVideoRecord(tup)
+        video_records.append(tup_record)
+
+    # path_to_bbox_dir = '{}/{}/hand-objects'.format('/raid/xiaoyuz1/EPIC/EPIC-KITCHENS',pid)
+    
+    vids = set()
+    for video_record in video_records:
+        assert video_record.participant == pid
+        vids.add(video_record.untrimmed_video_name)
+    vids = list(vids)
+
+    video_bboxs = []
+
+    # for video_idx in tqdm(range(len(video_records))):
+    for vid_idx in tqdm(range(len(vids))):
+        # video_record = video_records[video_idx]
+        vid = vids[vid_idx]
+
+        path_to_bbox = '{}/{}/hand-objects/{}.pkl'.format(args.visual_data_dir,
+                                                 pid,
+                                                 vid)
+        # path_to_bbox = os.path.join(path_to_bbox_dir, f)
+        bboxs = load_detections(path_to_bbox)
+
+        boxes = []
+        acc = 0
+        
+        # for idx in range(video_record.start_frame, video_record.end_frame+1):
+        for idx in tqdm(range(len(bboxs))):
+            any_box = False
+            frame_bbox = bboxs[idx]
+            frame_idx = frame_bbox.frame_number
+            assert acc <= frame_idx
+            for _ in range(acc, frame_idx):
+                boxes.append([acc, 1,0,1,1,0])
+                acc += 1
+            correspondence_d = frame_bbox.get_hand_object_interactions(
+                    object_threshold=0, hand_threshold=0)
+
+            if len(correspondence_d) == 0:
+                active_object_idx = []
+            else:
+                active_object_idx = list(correspondence_d.values())
+            
+            # if args.active_object:
+            #     for object_idx in active_object_idx:
+            #         obj_detect = frame_bbox.objects[object_idx]
+            #         bbox = obj_detect.bbox 
+            #         boxes.append([acc, 2.0, obj_detect.score, bbox.left, bbox.top, bbox.right, bbox.bottom])
+            #         any_box = True
+            # else:
+            #     # if args.active_object:
+            #     for object_idx, obj_detect in enumerate(frame_bbox.objects):
+            #         bbox = obj_detect.bbox 
+            #         boxes.append([acc, 1.0, obj_detect.score, bbox.left, bbox.top, bbox.right, bbox.bottom])
+            #         any_box = True
+            
+            for object_idx, obj_detect in enumerate(frame_bbox.objects):
+                bbox = obj_detect.bbox 
+                if object_idx in active_object_idx:
+                    boxes.append([acc, 2.0, obj_detect.score, bbox.left, bbox.top, bbox.right, bbox.bottom])
+                    any_box = True
+                else:
+                    boxes.append([acc, 1.0, obj_detect.score, bbox.left, bbox.top, bbox.right, bbox.bottom])
+                    any_box = True
+                        
+            # if args.hand:
+            for obj_detect in frame_bbox.hands:
+                bbox = obj_detect.bbox 
+                boxes.append([acc, 0.0, obj_detect.score, bbox.left, bbox.top, bbox.right, bbox.bottom])
+                any_box = True
+            
+            if not any_box:
+                boxes.append([acc, 1,0,1,1,0])
+            
+            acc += 1
+        
+        video_bboxs.append(np.asarray(boxes))
+    
+        with open(os.path.join(args.bbox_annotations_dir, formatter.format(vid)), 'wb+') as f:
+            pickle.dump(np.asarray(boxes), f)
+        
+
+# for pid in pkl_train.participant_id.unique():
+#     process('annotations_train_{}.pkl', pid)
+
+# for pid in pkl_val.participant_id.unique():
+#     process('annotations_val_{}.pkl', pid)
+process(args.pid)

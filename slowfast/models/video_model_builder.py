@@ -310,6 +310,7 @@ class SlowFast(nn.Module):
             trans_func_name=cfg.RESNET.TRANS_FUNC,
             dilation=cfg.RESNET.SPATIAL_DILATIONS[3],
         )
+        ########################################################
 
         if cfg.DETECTION.ENABLE:
             self.head = head_helper.ResNetRoIHead(

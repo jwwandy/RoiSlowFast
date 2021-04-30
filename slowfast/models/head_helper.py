@@ -88,18 +88,18 @@ class ResNetRoIHead(nn.Module):
 
         # Perform FC in a fully convolutional manner. The FC layer will be
         # initialized with a different std comparing to convolutional layers.
-        # self.projection = nn.Linear(sum(dim_in), num_classes, bias=True)
+        self.projection = nn.Linear(sum(dim_in), num_classes, bias=True)
 
-        # # Softmax for evaluation and testing.
-        # if act_func == "softmax":
-        #     self.act = nn.Softmax(dim=4)
-        # elif act_func == "sigmoid":
-        #     self.act = nn.Sigmoid()
-        # else:
-        #     raise NotImplementedError(
-        #         "{} is not supported as an activation"
-        #         "function.".format(act_func)
-        #     )
+        # Softmax for evaluation and testing.
+        if act_func == "softmax":
+            self.act = nn.Softmax(dim=4)
+        elif act_func == "sigmoid":
+            self.act = nn.Sigmoid()
+        else:
+            raise NotImplementedError(
+                "{} is not supported as an activation"
+                "function.".format(act_func)
+            )
 
     def forward(self, inputs, bboxes):
         assert (

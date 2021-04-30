@@ -1,8 +1,9 @@
 import os
 import torch
+import numpy as np 
 from . import utils as utils
 from .decoder import get_start_end_idx
-
+from .epickitchens_bbox import pack_frame_bbox_raw
 
 def temporal_sampling(num_frames, start_idx, end_idx, num_samples, start_frame=0):
     """
@@ -21,13 +22,6 @@ def temporal_sampling(num_frames, start_idx, end_idx, num_samples, start_frame=0
     index = torch.linspace(start_idx, end_idx, num_samples)
     index = torch.clamp(index, 0, num_frames - 1).long()
     return start_frame + index
-
-
-def pack_frame_bbox(cfg, frame_idx):
-    path_to_bbox = '{}/{}/hand-objects/{}'.format(cfg.EPICKITCHENS.VISUAL_DATA_DIR,
-                                                 video_record.participant,
-                                                 video_record.untrimmed_video_name)
-    bboxs = load_detections(hand_objects_path)
 
 
 def pack_frames_to_video_clip(cfg, video_record, temporal_sample_index, target_fps=60):
@@ -49,4 +43,8 @@ def pack_frames_to_video_clip(cfg, video_record, temporal_sample_index, target_f
                                   start_frame=video_record.start_frame)
     img_paths = [os.path.join(path_to_video, img_tmpl.format(idx.item())) for idx in frame_idx]
     frames = utils.retry_load_images(img_paths)
-    return frames
+    if cfg.EPICKITCHENS.USE_BBOX:
+        bboxs = pack_frame_bbox_raw(cfg, video_record, frame_idx)
+    else:
+        bboxs = None
+    return frames, bboxs

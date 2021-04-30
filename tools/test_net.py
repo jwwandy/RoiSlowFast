@@ -176,6 +176,11 @@ def test(cfg):
             inflation=False,
             convert_from_caffe2=cfg.TEST.CHECKPOINT_TYPE == "caffe2",
         )
+        ###
+
+        #### 
+
+        ###
     elif cu.has_checkpoint(cfg.OUTPUT_DIR):
         last_checkpoint = cu.get_last_checkpoint(cfg.OUTPUT_DIR)
         cu.load_checkpoint(last_checkpoint, model, cfg.NUM_GPUS > 1)

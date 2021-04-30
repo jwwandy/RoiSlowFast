@@ -295,6 +295,8 @@ class FrameDetections:
         object_centers = np.array(
             [self.objects[object_id].bbox.center for object_id in object_idxs]
         )
+        if len(object_centers) == 0:
+            return dict()
         for hand_idx, hand_detection in enumerate(self.hands):
             if (
                 hand_detection.state.value == HandState.NO_CONTACT.value

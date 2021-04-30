@@ -62,17 +62,22 @@ class Epickitchens(torch.utils.data.Dataset):
                 file
             )
 
+        self.video_ids = set()
         self._video_records = []
         self._spatial_temporal_idx = []
         for file in path_annotations_pickle:
             for tup in pd.read_pickle(file).iterrows():
                 tup_record = EpicKitchensVideoRecord(tup)
-                if not (tup_record.num_frames >= self.cfg.EPICKITCHENS.SEGMENT_MIN_LENGTH and \
-                    tup_record.num_frames >= self.cfg.EPICKITCHENS.SEGMENT_MAX_LENGTH):
+                self.video_ids.add(tup_record.untrimmed_video_name)
+                if not (tup_record.num_frames >= self.cfg.EPICKITCHENS.SEGMENT_MIN_LENGTH or \
+                    tup_record.num_frames <= self.cfg.EPICKITCHENS.SEGMENT_MAX_LENGTH):
                     continue
                 for idx in range(self._num_clips):
-                    self._video_records.append(EpicKitchensVideoRecord(tup))
+                    self._video_records.append(tup_record)
                     self._spatial_temporal_idx.append(idx)
+        
+        self.video_ids = list(self.video_ids)
+        
         assert (
                 len(self._video_records) > 0
         ), "Failed to load EPIC-KITCHENS split {} from {}".format(
@@ -130,7 +135,7 @@ class Epickitchens(torch.utils.data.Dataset):
                 "Does not support {} mode".format(self.mode)
             )
 
-        frames = pack_frames_to_video_clip(self.cfg, self._video_records[index], temporal_sample_index)
+        frames,bboxs = pack_frames_to_video_clip(self.cfg, self._video_records[index], temporal_sample_index)
         
         # Perform color normalization.
         frames = frames.float()
@@ -140,8 +145,9 @@ class Epickitchens(torch.utils.data.Dataset):
         # T H W C -> C T H W.
         frames = frames.permute(3, 0, 1, 2)
         # Perform data augmentation.
-        frames = self.spatial_sampling(
+        frames,bboxs = self.spatial_sampling(
             frames,
+            bboxs = bboxs,
             spatial_idx=spatial_sample_index,
             min_scale=min_scale,
             max_scale=max_scale,
@@ -151,7 +157,7 @@ class Epickitchens(torch.utils.data.Dataset):
         label = self._video_records[index].label
         frames = utils.pack_pathway_output(self.cfg, frames)
         metadata = self._video_records[index].metadata
-        return frames, label, index, metadata
+        return frames, bboxs, label, index, metadata
 
 
     def __len__(self):
@@ -160,6 +166,7 @@ class Epickitchens(torch.utils.data.Dataset):
     def spatial_sampling(
             self,
             frames,
+            bboxs = None,
             spatial_idx=-1,
             min_scale=256,
             max_scale=320,
@@ -185,18 +192,26 @@ class Epickitchens(torch.utils.data.Dataset):
             frames (tensor): spatially sampled frames.
         """
         assert spatial_idx in [-1, 0, 1, 2]
+        if not bboxs is None:
+            bboxs_4 = bboxs[:,1:].copy()
+        else:
+            bboxs_4 = None
         if spatial_idx == -1:
-            frames, _ = transform.random_short_side_scale_jitter(
-                frames, min_scale, max_scale
+            frames, bboxs_4 = transform.random_short_side_scale_jitter(
+                frames, min_scale, max_scale, boxes=bboxs_4
             )
-            frames, _ = transform.random_crop(frames, crop_size)
-            frames, _ = transform.horizontal_flip(0.5, frames)
+            frames, bboxs_4 = transform.random_crop(frames, crop_size, boxes=bboxs_4)
+            frames, bboxs_4 = transform.horizontal_flip(0.5, frames, boxes=bboxs_4)
         else:
             # The testing is deterministic and no jitter should be performed.
             # min_scale, max_scale, and crop_size are expect to be the same.
             assert len({min_scale, max_scale, crop_size}) == 1
-            frames, _ = transform.random_short_side_scale_jitter(
-                frames, min_scale, max_scale
+            frames, bboxs_4 = transform.random_short_side_scale_jitter(
+                frames, min_scale, max_scale, boxes=bboxs_4
             )
-            frames, _ = transform.uniform_crop(frames, crop_size, spatial_idx)
-        return frames
+            frames, bboxs_4 = transform.uniform_crop(frames, crop_size, spatial_idx, boxes=bboxs_4)
+        
+        if not bboxs is None:
+            bboxs[:,1:] = bboxs_4
+        
+        return frames, bboxs
