@@ -23,6 +23,13 @@ def temporal_sampling(num_frames, start_idx, end_idx, num_samples, start_frame=0
     return start_frame + index
 
 
+def pack_frame_bbox(cfg, frame_idx):
+    path_to_bbox = '{}/{}/hand-objects/{}'.format(cfg.EPICKITCHENS.VISUAL_DATA_DIR,
+                                                 video_record.participant,
+                                                 video_record.untrimmed_video_name)
+    bboxs = load_detections(hand_objects_path)
+
+
 def pack_frames_to_video_clip(cfg, video_record, temporal_sample_index, target_fps=60):
     # Load video by loading its extracted frames
     path_to_video = '{}/{}/rgb_frames/{}'.format(cfg.EPICKITCHENS.VISUAL_DATA_DIR,
