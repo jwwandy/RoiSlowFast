@@ -18,13 +18,6 @@ parser.add_argument('--annotations_dir', type=str)
 parser.add_argument('--visual_data_dir', type=str)
 parser.add_argument('--bbox_annotations_dir', type=str)
 parser.add_argument('--anno_format', type=str)
-
-parser.add_argument('--object', type=int, default=1)
-parser.add_argument('--active_object', type=int, default=0)
-parser.add_argument('--hand', type=int, default=1)
-# parser.add_argument('--hand_threshold', type=int, default=1)
-# parser.add_argument('--object_threshold', type=int, default=1)
-
 parser.add_argument('--pid', type=str)
 
 args = parser.parse_args()
@@ -72,13 +65,13 @@ def process(pid):
         acc = 0
         
         # for idx in range(video_record.start_frame, video_record.end_frame+1):
-        for idx in tqdm(range(len(bboxs))):
+        for idx in range(len(bboxs)):
             any_box = False
             frame_bbox = bboxs[idx]
             frame_idx = frame_bbox.frame_number
             assert acc <= frame_idx
             for _ in range(acc, frame_idx):
-                boxes.append([acc, 1,0,1,1,0])
+                boxes.append([acc, 0.0,1,0,1,1,0])
                 acc += 1
             correspondence_d = frame_bbox.get_hand_object_interactions(
                     object_threshold=0, hand_threshold=0)
@@ -87,19 +80,6 @@ def process(pid):
                 active_object_idx = []
             else:
                 active_object_idx = list(correspondence_d.values())
-            
-            # if args.active_object:
-            #     for object_idx in active_object_idx:
-            #         obj_detect = frame_bbox.objects[object_idx]
-            #         bbox = obj_detect.bbox 
-            #         boxes.append([acc, 2.0, obj_detect.score, bbox.left, bbox.top, bbox.right, bbox.bottom])
-            #         any_box = True
-            # else:
-            #     # if args.active_object:
-            #     for object_idx, obj_detect in enumerate(frame_bbox.objects):
-            #         bbox = obj_detect.bbox 
-            #         boxes.append([acc, 1.0, obj_detect.score, bbox.left, bbox.top, bbox.right, bbox.bottom])
-            #         any_box = True
             
             for object_idx, obj_detect in enumerate(frame_bbox.objects):
                 bbox = obj_detect.bbox 
@@ -110,14 +90,13 @@ def process(pid):
                     boxes.append([acc, 1.0, obj_detect.score, bbox.left, bbox.top, bbox.right, bbox.bottom])
                     any_box = True
                         
-            # if args.hand:
             for obj_detect in frame_bbox.hands:
                 bbox = obj_detect.bbox 
                 boxes.append([acc, 0.0, obj_detect.score, bbox.left, bbox.top, bbox.right, bbox.bottom])
                 any_box = True
             
             if not any_box:
-                boxes.append([acc, 1,0,1,1,0])
+                boxes.append([acc, 0.0, 1,0,1,1,0])
             
             acc += 1
         

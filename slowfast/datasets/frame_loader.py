@@ -43,8 +43,4 @@ def pack_frames_to_video_clip(cfg, video_record, temporal_sample_index, target_f
                                   start_frame=video_record.start_frame)
     img_paths = [os.path.join(path_to_video, img_tmpl.format(idx.item())) for idx in frame_idx]
     frames = utils.retry_load_images(img_paths)
-    if cfg.EPICKITCHENS.USE_BBOX:
-        bboxs = pack_frame_bbox_raw(cfg, video_record, frame_idx)
-    else:
-        bboxs = None
-    return frames, bboxs
+    return frames, frame_idx

@@ -1,5 +1,6 @@
 import os
 import pandas as pd
+import numpy as np
 import torch
 import torch.utils.data
 
@@ -7,6 +8,7 @@ import slowfast.utils.logging as logging
 
 from .build import DATASET_REGISTRY
 from .epickitchens_record import EpicKitchensVideoRecord
+from .epickitchens_bbox import load_precomputed_bbox
 
 from . import transform as transform
 from . import utils as utils
@@ -77,6 +79,7 @@ class Epickitchens(torch.utils.data.Dataset):
                     self._spatial_temporal_idx.append(idx)
         
         self.video_ids = list(self.video_ids)
+        self.video_id_to_bbox_dict = load_precomputed_bbox(self.cfg, self.video_ids)
         
         assert (
                 len(self._video_records) > 0
@@ -135,7 +138,18 @@ class Epickitchens(torch.utils.data.Dataset):
                 "Does not support {} mode".format(self.mode)
             )
 
-        frames,bboxs = pack_frames_to_video_clip(self.cfg, self._video_records[index], temporal_sample_index)
+        frames,frame_idx = pack_frames_to_video_clip(self.cfg, self._video_records[index], temporal_sample_index)
+
+        if self.cfg.EPICKITCHENS.USE_BBOX:
+            vid = self._video_records[index].untrimmed_video_name
+            vid_bbox = self.video_id_to_bbox_dict.get(vid, None)
+            if vid_bbox is None:
+                bboxs = None 
+            else:
+                row_idx, remapped_idx = np.where(bboxs[:,0].reshape((-1,1)) == frame_idx)
+                
+        else:
+            bboxs = None
         
         # Perform color normalization.
         frames = frames.float()

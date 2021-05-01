@@ -5,20 +5,31 @@ import numpy as np
 import os
 import pickle
 
+
 def load_precomputed_bbox(cfg, video_ids):
     bboxs_dict = dict()
     for vid in video_ids:
-        path_to_bbox = os.path.join(cfg.EPICKITCHENS.BBOX_ANNOTATIONS_DIR, 'annotations_{}.pkl'.format(vid))
+        path_to_bbox = os.path.join(cfg.EPICKITCHENS.BBOX_ANNOTATIONS_DIR, '{}.pkl'.format(vid))
         bboxs = None
         with open(path_to_bbox,'rb') as f:
             bboxs = pickle.load(f)
         
+        mask = np.zeros(len(bboxs)).astype(bool)
         if cfg.EPICKITCHENS.BBOX_ACTIVE_OBJECT:
-            bboxs = 
+            mask = np.logical_and(bboxs[1] == 2, bboxs[2] >= cfg.EPICKITCHENS.BBOX_OBJECT_THRESHOLD)
+            
+        elif cfg.EPICKITCHENS.BBOX_OBJECT:
+            mask1 = np.logical_or(bboxs[1] == 2, bboxs[1] == 1)
+            mask = np.logical_and(mask1, bboxs[2] >= cfg.EPICKITCHENS.BBOX_OBJECT_THRESHOLD)
+
+        if cfg.EPICKITCHENS.BBOX_HAND:
+            mask1 = np.logical_and(bboxs[1] == 0, bboxs[2] >= cfg.EPICKITCHENS.BBOX_HAND_THRESHOLD)
+            mask = np.logical_or(mask, mask1)
         
+        bboxs = bboxs[mask]
         bboxs_dict[vid] = bboxs
 
-
+    return bboxs_dict
         
 
 def load_all_bbox(visual_data_dir, video_records):
