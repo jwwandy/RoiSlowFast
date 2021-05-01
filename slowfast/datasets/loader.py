@@ -12,6 +12,25 @@ from torch.utils.data.sampler import RandomSampler
 
 from .build import build_dataset
 
+def epic_bbox_collate(batch):
+    """
+    Collate function for detection task. Concatanate bboxes, labels and
+    metadata from different samples in the first dimension instead of
+    stacking them to have a batch-size dimension.
+    Args:
+        batch (tuple or list): data batch to collate.
+    Returns:
+        (tuple): collated detection data batch.
+    """
+    inputs, all_bboxs, all_masks, labels, video_idx, extra_data = zip(*batch)
+    inputs, video_idx = default_collate(inputs), default_collate(video_idx)
+    # labels = torch.tensor(np.concatenate(labels, axis=0)).float()
+    labels = default_collate(labels)
+    extra_data = default_collate(extra_data)
+
+    return inputs, labels, video_idx, extra_data
+
+
 
 def detection_collate(batch):
     """

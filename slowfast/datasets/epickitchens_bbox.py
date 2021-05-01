@@ -6,30 +6,61 @@ import os
 import pickle
 
 
+def create_mask_3d(bboxs_len, last_dim):
+    max_len = np.max(bboxs_len)
+    # true_base = [[True] * last_dim]
+    # false_base = [[False] * last_dim]
+    # mask = np.array([true_base * leni + false_base * (max_len - leni)  for i,leni in enumerate(bboxs_len)])
+
+    '''
+    mask = np.apply_along_axis(lambda x: np.pad(np.ones(x[0]).astype(bool), \
+                              (0, max_len-x[0]), 'constant', constant_values=(False, False)), 1, \
+                    np.repeat(bboxs_len.reshape((-1,1)),max_len,axis=1))
+    '''
+
+    mask = np.array([[True] * leni + [False] * (max_len - leni)  for i,leni in enumerate(bboxs_len)])
+    mask = np.repeat(mask.reshape((-1,max_len,1)), last_dim, axis=2)
+    return mask
+
+
+def create_mask_2d(bboxs_len):
+    max_len = np.max(bboxs_len)
+    mask = np.array([[True] * leni + [False] * (max_len - leni)  for i,leni in enumerate(bboxs_len)])
+    return mask
+
+
 def load_precomputed_bbox(cfg, video_ids):
     bboxs_dict = dict()
+    mask_dict = dict()
     for vid in video_ids:
-        path_to_bbox = os.path.join(cfg.EPICKITCHENS.BBOX_ANNOTATIONS_DIR, '{}.pkl'.format(vid))
-        bboxs = None
+        path_to_bbox = os.path.join(cfg.EPICKITCHENS.BBOX_ANNOTATIONS_DIR, 'annotations_{}.pkl'.format(vid))
+        bboxs, bboxs_len= None, None #(T, max_len, 7)
         with open(path_to_bbox,'rb') as f:
-            bboxs = pickle.load(f)
+            bboxs,bboxs_len = pickle.load(f)
         
-        mask = np.zeros(len(bboxs)).astype(bool)
+        T, max_len, last_dim = bboxs.shape  
+        
+        mask = create_mask_2d(bboxs_len) #np.zeros((T, max_len)).astype(bool)
         if cfg.EPICKITCHENS.BBOX_ACTIVE_OBJECT:
-            mask = np.logical_and(bboxs[1] == 2, bboxs[2] >= cfg.EPICKITCHENS.BBOX_OBJECT_THRESHOLD)
-            
-        elif cfg.EPICKITCHENS.BBOX_OBJECT:
-            mask1 = np.logical_or(bboxs[1] == 2, bboxs[1] == 1)
-            mask = np.logical_and(mask1, bboxs[2] >= cfg.EPICKITCHENS.BBOX_OBJECT_THRESHOLD)
+            mask = np.logical_and(bboxs[:,:,1] == 2, bboxs[:,:,2] >= cfg.EPICKITCHENS.BBOX_OBJECT_THRESHOLD)
+        else:
+            mask_object = np.logical_or(bboxs[:,:,1] == 2, bboxs[:,:,1] == 1)
+            mask = np.logical_and(mask_object, bboxs[:,:,2] >= cfg.EPICKITCHENS.BBOX_OBJECT_THRESHOLD)
 
         if cfg.EPICKITCHENS.BBOX_HAND:
-            mask1 = np.logical_and(bboxs[1] == 0, bboxs[2] >= cfg.EPICKITCHENS.BBOX_HAND_THRESHOLD)
-            mask = np.logical_or(mask, mask1)
+            mask_hand = np.logical_and(bboxs[:,:,1] == 0, bboxs[:,:,2] >= cfg.EPICKITCHENS.BBOX_HAND_THRESHOLD)
+            mask = np.logical_or(mask, mask_hand)
         
-        bboxs = bboxs[mask]
-        bboxs_dict[vid] = bboxs
+        
+        # mask = np.any(mask, axis=1)
+        # bboxs = bboxs[mask]
+        
+        # mask = np.repeat(mask.reshape((-1,max_len,1)), last_dim, axis=2)
+        # bboxs = mask * bboxs
+        bboxs_dict[vid] = bboxs[:,:,-4:]
+        mask_dict[vid] = mask
 
-    return bboxs_dict
+    return bboxs_dict, mask_dict
         
 
 def load_all_bbox(visual_data_dir, video_records):

@@ -52,28 +52,30 @@ def process(pid):
 
     # for video_idx in tqdm(range(len(video_records))):
     for vid_idx in tqdm(range(len(vids))):
-        # video_record = video_records[video_idx]
         vid = vids[vid_idx]
 
         path_to_bbox = '{}/{}/hand-objects/{}.pkl'.format(args.visual_data_dir,
                                                  pid,
                                                  vid)
-        # path_to_bbox = os.path.join(path_to_bbox_dir, f)
         bboxs = load_detections(path_to_bbox)
 
         boxes = []
-        acc = 0
-        
-        # for idx in range(video_record.start_frame, video_record.end_frame+1):
+        boxes_len = []
+        frame_idx_acc = 0
+
         for idx in range(len(bboxs)):
-            any_box = False
-            frame_bbox = bboxs[idx]
-            frame_idx = frame_bbox.frame_number
-            assert acc <= frame_idx
-            for _ in range(acc, frame_idx):
-                boxes.append([acc, 0.0,1,0,1,1,0])
-                acc += 1
-            correspondence_d = frame_bbox.get_hand_object_interactions(
+            frame_bbox_object = bboxs[idx]
+            frame_idx = frame_bbox_object.frame_number
+            assert frame_idx_acc <= frame_idx
+            
+            frame_bbox = []
+            
+            for _ in range(frame_idx_acc, frame_idx):
+                boxes.append([])
+                boxes_len.append(0)
+                frame_idx_acc += 1
+
+            correspondence_d = frame_bbox_object.get_hand_object_interactions(
                     object_threshold=0, hand_threshold=0)
 
             if len(correspondence_d) == 0:
@@ -81,29 +83,30 @@ def process(pid):
             else:
                 active_object_idx = list(correspondence_d.values())
             
-            for object_idx, obj_detect in enumerate(frame_bbox.objects):
+            for object_idx, obj_detect in enumerate(frame_bbox_object.objects):
                 bbox = obj_detect.bbox 
                 if object_idx in active_object_idx:
-                    boxes.append([acc, 2.0, obj_detect.score, bbox.left, bbox.top, bbox.right, bbox.bottom])
-                    any_box = True
+                    frame_bbox.append([frame_idx_acc, 2.0, obj_detect.score, bbox.left, bbox.top, bbox.right, bbox.bottom])
                 else:
-                    boxes.append([acc, 1.0, obj_detect.score, bbox.left, bbox.top, bbox.right, bbox.bottom])
-                    any_box = True
+                    frame_bbox.append([frame_idx_acc, 1.0, obj_detect.score, bbox.left, bbox.top, bbox.right, bbox.bottom])
+
                         
-            for obj_detect in frame_bbox.hands:
+            for obj_detect in frame_bbox_object.hands:
                 bbox = obj_detect.bbox 
-                boxes.append([acc, 0.0, obj_detect.score, bbox.left, bbox.top, bbox.right, bbox.bottom])
-                any_box = True
-            
-            if not any_box:
-                boxes.append([acc, 0.0, 1,0,1,1,0])
-            
-            acc += 1
+                frame_bbox.append([frame_idx_acc, 0.0, obj_detect.score, bbox.left, bbox.top, bbox.right, bbox.bottom])
+               
+            boxes.append(frame_bbox)
+            boxes_len.append(len(frame_bbox))
+            frame_idx_acc += 1
         
-        video_bboxs.append(np.asarray(boxes))
+        max_num_bbox_per_frame = np.max(boxes_len)
+        padded_boxes = []
+        for frame_idx, frame_bbox in enumerate(boxes):
+            frame_bbox_padded = frame_bbox + [[frame_idx, 1.0, 0.0, 0.0, 0.0, 1.0, 1.0]] * (max_num_bbox_per_frame - boxes_len[frame_idx])
+            padded_boxes.append(frame_bbox_padded)
     
         with open(os.path.join(args.bbox_annotations_dir, formatter.format(vid)), 'wb+') as f:
-            pickle.dump(np.asarray(boxes), f)
+            pickle.dump((np.asarray(padded_boxes), np.asarray(boxes_len)), f)
         
 
 # for pid in pkl_train.participant_id.unique():
