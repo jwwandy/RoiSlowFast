@@ -124,6 +124,57 @@ class FuseFastToSlow(nn.Module):
         x_s_fuse = torch.cat([x_s, fuse], 1)
         return [x_s_fuse, x_f]
 
+@MODEL_REGISTRY.register()
+class SlowFastBbox(nn.Module):
+    def __init__(self, cfg):
+        super(SlowFastBbox, self).__init__()
+        self.enable_detection = cfg.DETECTION.ENABLE
+        self.num_pathways = 2
+        self.slow_fast = SlowFast(cfg)
+        self.bbox_head = head_helper.ResNetBboxClassifierHead(
+            dim_in=[
+                cfg.RESNET.WIDTH_PER_GROUP * 32,
+                cfg.RESNET.WIDTH_PER_GROUP * 32 // cfg.SLOWFAST.BETA_INV,
+            ],
+            num_classes=cfg.MODEL.NUM_CLASSES, 
+            pool_size=[
+                [1, 1, 1], 
+                [1, 1, 1],
+            ],
+            resolution=[[cfg.DETECTION.ROI_XFORM_RESOLUTION] * 2] * 2, 
+            scale_factor=[cfg.DETECTION.SPATIAL_SCALE_FACTOR] * 2,
+            act_func="softmax",
+            aligned=cfg.DETECTION.ALIGNED,
+        )
+        init_helper.init_weights(
+            self.bbox_head, cfg.MODEL.FC_INIT_STD, cfg.RESNET.ZERO_INIT_FINAL_BN
+        )
+    
+    def load_weight_slowfast(self, slow_fast_model=None):
+        if slow_fast_model != None:
+            slow_fast_model.head = nn.Identity()
+            self.slow_fast = slow_fast_model
+
+    def forward(self, x, bboxes=None):
+        feat = self.slow_fast(x)
+        out = self.bbox_head(x, bboxes=bboxes)
+        return out
+
+    def freeze_fn(self, freeze_mode):
+
+        if freeze_mode == 'bn_parameters':
+            print("Freezing all BN layers\' parameters.")
+            for m in self.modules():
+                if isinstance(m, nn.BatchNorm3d):
+                    # shutdown parameters update in frozen mode
+                    m.weight.requires_grad_(False)
+                    m.bias.requires_grad_(False)
+        elif freeze_mode == 'bn_statistics':
+            print("Freezing all BN layers\' statistics.")
+            for m in self.modules():
+                if isinstance(m, nn.BatchNorm3d):
+                    # shutdown running statistics update in frozen mode
+                    m.eval()
 
 @MODEL_REGISTRY.register()
 class SlowFast(nn.Module):
@@ -572,6 +623,175 @@ class ResNet(nn.Module):
             x[pathway] = pool(x[pathway])
         x = self.s3(x)
         x = self.s4(x)
+        x = self.s5(x)
+        if self.enable_detection:
+            x = self.head(x, bboxes)
+        else:
+            x = self.head(x)
+        return x
+
+@MODEL_REGISTRY.register()
+class BboxClassifier(nn.Module):
+    def __init__(self, cfg):
+        """
+        The `__init__` method of any subclass should also contain these
+            arguments.
+        Args:
+            cfg (CfgNode): model building configs, details are in the
+                comments of the config file.
+        """
+        super(BboxClassifier, self).__init__()
+        self.num_pathways = 2
+        self._construct_network(cfg)
+        init_helper.init_weights(
+            self, cfg.MODEL.FC_INIT_STD, cfg.RESNET.ZERO_INIT_FINAL_BN
+        )
+
+    def _construct_network(self, cfg):
+        """
+        Builds a SlowFast model. The first pathway is the Slow pathway and the
+            second pathway is the Fast pathway.
+
+        Args:
+            cfg (CfgNode): model building configs, details are in the
+                comments of the config file.
+        """
+        assert cfg.MODEL.ARCH in _POOL1.keys()
+        pool_size = _POOL1[cfg.MODEL.ARCH]
+        assert len({len(pool_size), self.num_pathways}) == 1
+        
+        num_groups = cfg.RESNET.NUM_GROUPS
+        width_per_group = cfg.RESNET.WIDTH_PER_GROUP
+        dim_inner = num_groups * width_per_group
+        out_dim_ratio = (
+            cfg.SLOWFAST.BETA_INV // cfg.SLOWFAST.FUSION_CONV_CHANNEL_RATIO
+        )
+
+        temp_kernel = _TEMPORAL_KERNEL_BASIS[cfg.MODEL.ARCH]
+        
+        # Create Bbox argument
+        dim_in=[
+            width_per_group * 32,
+            width_per_group * 32 // cfg.SLOWFAST.BETA_INV,
+        ]
+        num_classes=cfg.MODEL.NUM_CLASSES
+        pool_size_b=[
+            [1, 1, 1],
+            [1, 1, 1],
+        ]
+        resolution=[[cfg.DETECTION.ROI_XFORM_RESOLUTION] * 2] * 2,
+        scale_factor=[cfg.DETECTION.SPATIAL_SCALE_FACTOR] * 2,
+        dropout_rate=cfg.MODEL.DROPOUT_RATE,
+        act_func_b="sigmoid",
+        aligned=cfg.DETECTION.ALIGNED
+
+        self.roi_head = head_helper.ResNetBboxClassifierHead(
+                dim_in=[width_per_group * 32],
+                num_classes=cfg.MODEL.NUM_CLASSES,
+                pool_size=[[cfg.DATA.NUM_FRAMES // pool_size[0][0], 1, 1]],
+                resolution=[[cfg.DETECTION.ROI_XFORM_RESOLUTION] * 2],
+                scale_factor=[cfg.DETECTION.SPATIAL_SCALE_FACTOR],
+                dropout_rate=cfg.MODEL.DROPOUT_RATE,
+                act_func="sigmoid",
+                aligned=cfg.DETECTION.ALIGNED,
+            )
+
+        assert (
+            len({len(pool_size), len(dim_in)}) == 1
+        ), "pathway dimensions are not consistent."
+        self.num_pathways = len(pool_size)
+        for pathway in range(self.num_pathways):
+            temporal_pool = nn.AvgPool3d(
+                [pool_size_b[pathway][0], 1, 1], stride=1
+            )
+            self.add_module("s{}_tpool".format(pathway), temporal_pool)
+
+            roi_align = ROIAlign(
+                resolution[pathway],
+                spatial_scale=1.0 / scale_factor[pathway],
+                sampling_ratio=0,
+                aligned=aligned,
+            )
+            self.add_module("s{}_roi".format(pathway), roi_align)
+            spatial_pool = nn.MaxPool2d(resolution[pathway], stride=1)
+            self.add_module("s{}_spool".format(pathway), spatial_pool)
+
+        if dropout_rate > 0.0:
+            self.dropout = nn.Dropout(dropout_rate)
+
+        # Perform FC in a fully convolutional manner. The FC layer will be
+        # initialized with a different std comparing to convolutional layers.
+        self.projection = nn.Linear(sum(dim_in), num_classes, bias=True)
+
+        # Softmax for evaluation and testing.
+        if act_func == "softmax":
+            self.act = nn.Softmax(dim=4)
+        elif act_func == "sigmoid":
+            self.act = nn.Sigmoid()
+        else:
+            raise NotImplementedError(
+                "{} is not supported as an activation"
+                "function.".format(act_func)
+            )
+
+        # Classifier components
+        pool_size=[
+            [
+                cfg.DATA.NUM_FRAMES
+                // cfg.SLOWFAST.ALPHA
+                // pool_size[0][0],
+                cfg.DATA.CROP_SIZE // 32 // pool_size[0][1],
+                cfg.DATA.CROP_SIZE // 32 // pool_size[0][2],
+            ],
+            [
+                cfg.DATA.NUM_FRAMES // pool_size[1][0],
+                cfg.DATA.CROP_SIZE // 32 // pool_size[1][1],
+                cfg.DATA.CROP_SIZE // 32 // pool_size[1][2],
+            ],
+        ],
+        dropout_rate=cfg.MODEL.DROPOUT_RATE
+        assert (
+            len({len(pool_size), len(dim_in)}) == 1
+        ), "pathway dimensions are not consistent."
+        self.num_pathways = len(pool_size)
+
+        for pathway in range(self.num_pathways):
+            avg_pool = nn.AvgPool3d(pool_size[pathway], stride=1)
+            self.add_module("pathway{}_avgpool".format(pathway), avg_pool)
+
+        if dropout_rate > 0.0:
+            self.dropout = nn.Dropout(dropout_rate)
+        # Perform FC in a fully convolutional manner. The FC layer will be
+        # initialized with a different std comparing to convolutional layers.
+        if isinstance(num_classes, (list, tuple)):
+            self.projection_verb = nn.Linear(sum(dim_in), num_classes[0], bias=True)
+            self.projection_noun = nn.Linear(sum(dim_in), num_classes[1], bias=True)
+        else:
+            self.projection = nn.Linear(sum(dim_in), num_classes, bias=True)
+        self.num_classes = num_classes
+        # Softmax for evaluation and testing.
+        if act_func == "softmax":
+            self.act = nn.Softmax(dim=4)
+        elif act_func == "sigmoid":
+            self.act = nn.Sigmoid()
+        else:
+            raise NotImplementedError(
+                "{} is not supported as an activation"
+                "function.".format(act_func)
+            )
+
+    def forward(self, x, bboxes=None):
+        x = self.s1(x)
+        x = self.s1_fuse(x)
+        x = self.s2(x)
+        x = self.s2_fuse(x)
+        for pathway in range(self.num_pathways):
+            pool = getattr(self, "pathway{}_pool".format(pathway))
+            x[pathway] = pool(x[pathway])
+        x = self.s3(x)
+        x = self.s3_fuse(x)
+        x = self.s4(x)
+        x = self.s4_fuse(x)
         x = self.s5(x)
         if self.enable_detection:
             x = self.head(x, bboxes)

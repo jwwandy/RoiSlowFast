@@ -7,6 +7,123 @@ import torch
 import torch.nn as nn
 from detectron2.layers import ROIAlign
 
+class ResNetBboxClassifierHead(nn.Module):
+    def __init__(
+        self,
+        dim_in,
+        num_classes,
+        pool_size,
+        resolution,
+        scale_factor,
+        dropout_rate=0.0,
+        act_func="softmax",
+        aligned=True,
+    ):
+        super(ResNetBboxClassifierHead, self).__init__()
+        assert (
+            len({len(pool_size), len(dim_in)}) == 1
+        ), "pathway dimensions are not consistent."
+        self.dim_in = dim_in
+        self.num_classes = num_classes
+        self.num_pathways = len(pool_size)
+        self.resolution = resolution
+        for pathway in range(self.num_pathways):
+            # No temporal pooling
+            roi_align = ROIAlign(
+                resolution[pathway],
+                spatial_scale=1.0 / scale_factor[pathway],
+                sampling_ratio=0,
+                aligned=aligned,
+            )
+            self.add_module("s{}_roi".format(pathway), roi_align)
+            spatial_pool = nn.MaxPool2d(resolution[pathway], stride=1)
+            self.add_module("s{}_spool".format(pathway), spatial_pool)
+
+        if dropout_rate > 0.0:
+            self.dropout = nn.Dropout(dropout_rate)
+
+        # Softmax for evaluation and testing.
+        if act_func == "softmax":
+            self.act = nn.Softmax(dim=4)
+        elif act_func == "sigmoid":
+            self.act = nn.Sigmoid()
+        else:
+            raise NotImplementedError(
+                "{} is not supported as an activation"
+                "function.".format(act_func)
+            )
+
+        if isinstance(num_classes, (list, tuple)):
+            self.projection_verb = nn.Linear(sum(dim_in), num_classes[0], bias=True)
+            self.projection_noun = nn.Linear(sum(dim_in), num_classes[1], bias=True)
+        else:
+            self.projection = nn.Linear(sum(dim_in), num_classes, bias=True)
+
+    def forward(self, inputs, bboxes):
+        assert (
+            len(inputs) == self.num_pathways
+        ), "Input tensor does not contain {} pathway".format(self.num_pathways)
+        pool_out = []
+        for pathway in range(self.num_pathways):
+            input = inputs[pathway]
+            assert len(input.shape) == 5
+            # B, C, T, H, W -> B, T, C, H, W
+            input = input.permute((0, 2, 1, 3, 4))
+            # B*T, C, H, W
+            input = input.view(-1, *input.shape[2:])
+
+            roi_align = getattr(self, "s{}_roi".format(pathway))
+            # B*T*N, C, output_size[0], output_size[1]
+            print(input.shape)
+            out = roi_align(input, bboxes)
+            print(out.shape)
+            '''
+            How to concatenate across the N dimension
+            '''            
+            # DO SOME MAGIC -> # B, C, T, output_size[0], output_size[1]
+            print(self.resolution)
+            out_p = out.view(1,-1,7,7)
+            s_pool = getattr(self, "s{}_spool".format(pathway))
+            pool_out.append(s_pool(out_p))
+            # Spatial Pool 出來後 will be B x C*T x 1 x 1
+
+        # B C*T H W.
+        x = torch.cat(pool_out, 1)
+        x = x.view(1, sum(self.dim_in) // 64, -1, 1, 1)
+        # (N, C, T, H, W) -> (N, T, H, W, C).
+        x = x.permute((0, 2, 3, 4, 1))
+        # Perform dropout.
+        if hasattr(self, "dropout"):
+            x = self.dropout(x)
+
+        if isinstance(self.num_classes, (list, tuple)):
+            x_v = self.projection_verb(x)
+            x_n = self.projection_noun(x)
+
+            # Performs fully convlutional inference.
+            if not self.training: # act here should be sigmoid
+                x_v = self.act(x_v)
+                x_v = x_v.mean([1, 2, 3])
+
+            x_v = x_v.view(x_v.shape[0], -1)
+
+            # Performs fully convlutional inference.
+            if not self.training:
+                x_n = self.act(x_n)
+                x_n = x_n.mean([1, 2, 3])
+
+            x_n = x_n.view(x_n.shape[0], -1)
+            return (x_v, x_n)
+        else:
+            x = self.projection(x)
+
+            # Performs fully convlutional inference.
+            if not self.training:
+                x = self.act(x)
+                x = x.mean([1, 2, 3])
+
+            x = x.view(x.shape[0], -1)
+            return x
 
 class ResNetRoIHead(nn.Module):
     """
