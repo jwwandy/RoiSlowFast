@@ -8,7 +8,7 @@ import slowfast.utils.logging as logging
 
 from .build import DATASET_REGISTRY
 from .epickitchens_record import EpicKitchensVideoRecord
-from .epickitchens_bbox import load_precomputed_bbox
+from .epickitchens_bbox import load_precomputed_bbox, refine_mask_by_filter_out_zero_mask
 
 from . import transform as transform
 from . import utils as utils
@@ -92,21 +92,7 @@ class Epickitchens(torch.utils.data.Dataset):
             )
         )
 
-    def __getitem__(self, index):
-        """
-        Given the video index, return the list of frames, label, and video
-        index if the video can be fetched and decoded successfully, otherwise
-        repeatly find a random video that can be decoded as a replacement.
-        Args:
-            index (int): the video index provided by the pytorch sampler.
-        Returns:
-            frames (tensor): the frames of sampled from the video. The dimension
-                is `channel` x `num frames` x `height` x `width`.
-            label (int): the label of the current video.
-            index (int): if the video provided by pytorch sampler can be
-                decoded, then return the index of the video. If not, return the
-                index of the video replacement that can be decoded.
-        """
+    def get_frames_sample_info(self, index):
         if self.mode in ["train", "val", "train+val"]:
             # -1 indicates random sampling.
             temporal_sample_index = -1
@@ -137,8 +123,28 @@ class Epickitchens(torch.utils.data.Dataset):
             raise NotImplementedError(
                 "Does not support {} mode".format(self.mode)
             )
-
+        
+        return temporal_sample_index, spatial_sample_index, min_scale, max_scale, crop_size
+    
+    def __getitem__(self, index):
+        """
+        Given the video index, return the list of frames, label, and video
+        index if the video can be fetched and decoded successfully, otherwise
+        repeatly find a random video that can be decoded as a replacement.
+        Args:
+            index (int): the video index provided by the pytorch sampler.
+        Returns:
+            frames (tensor): the frames of sampled from the video. The dimension
+                is `channel` x `num frames` x `height` x `width`.
+            label (int): the label of the current video.
+            index (int): if the video provided by pytorch sampler can be
+                decoded, then return the index of the video. If not, return the
+                index of the video replacement that can be decoded.
+        """
+        
+        temporal_sample_index, spatial_sample_index, min_scale, max_scale, crop_size = self.get_frames_sample_info(index)
         frames,frame_idx = pack_frames_to_video_clip(self.cfg, self._video_records[index], temporal_sample_index)
+        # frames: (T,256,456,C)
 
         bboxs = None
         mask = None
@@ -149,6 +155,13 @@ class Epickitchens(torch.utils.data.Dataset):
             if not vid_bbox is None:
                 bboxs = vid_bbox[frame_idx]
                 mask = mask_bbox[frame_idx] #(T,max_len)
+        
+        # Scale bbox from [0,1]  to [0,H] or [0,W]
+        T,H,W,_ = frames.shape
+        bboxs[:,:,0] *= W
+        bboxs[:,:,1] *= H
+        bboxs[:,:,2] *= W
+        bboxs[:,:,3] *= H
 
         # Perform color normalization.
         frames = frames.float()
@@ -171,14 +184,17 @@ class Epickitchens(torch.utils.data.Dataset):
         frames = utils.pack_pathway_output(self.cfg, frames)
         metadata = self._video_records[index].metadata
 
+        has_no_area, mask = refine_mask_by_filter_out_zero_mask(bboxs, mask)
+        bboxs[has_no_area] = np.array([0.0, 0.0, crop_size, crop_size])
         fast_bboxs = bboxs.copy()
         fast_mask = mask.copy()
+        
         if self.cfg.MODEL.ARCH in self.cfg.MODEL.SINGLE_PATHWAY_ARCH:
             all_bboxs = [torch.FloatTensor(fast_bboxs)]
             all_masks = [torch.FloatTensor(fast_mask)]
         else:
             slow_bboxs = bboxs.copy()
-            select_slow_idx = np.linspace(0, 31, 32 // 4).astype(int)
+            select_slow_idx = np.linspace(0, frames[1].shape[1]-1, frames[1].shape[1] // cfg.SLOWFAST.ALPHA).astype(int)
             slow_bboxs = slow_bboxs[select_slow_idx]
 
             slow_mask = mask.copy()

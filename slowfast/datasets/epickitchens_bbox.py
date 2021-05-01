@@ -23,6 +23,25 @@ def create_mask_3d(bboxs_len, last_dim):
     return mask
 
 
+def refine_mask_by_filter_out_zero_mask(bboxs, mask):
+    '''
+    Filter out bounding-boxes that have no width or no height
+
+    bboxs: (T, N, 4)
+    mask: (T, N)
+    '''
+    if bboxs is None:
+        return mask 
+    
+    # bboxs_4 = bboxs.reshape((-1,4))
+    no_width = bboxs[:,:,2] -  bboxs[:,:,0] < 1
+    no_height = bboxs[:,:,3] -  bboxs[:,:,1] < 1
+    has_no_area = np.logical_or(no_width, no_height)
+    has_area = np.logical_not(has_no_area)
+    mask = np.logical_and(has_area, mask)
+
+    return has_no_area, mask
+
 def create_mask_2d(bboxs_len):
     max_len = np.max(bboxs_len)
     mask = np.array([[True] * leni + [False] * (max_len - leni)  for i,leni in enumerate(bboxs_len)])
@@ -45,7 +64,8 @@ def load_precomputed_bbox(cfg, video_ids):
             mask = np.logical_and(bboxs[:,:,1] == 2, bboxs[:,:,2] >= cfg.EPICKITCHENS.BBOX_OBJECT_THRESHOLD)
         else:
             mask_object = np.logical_or(bboxs[:,:,1] == 2, bboxs[:,:,1] == 1)
-            mask = np.logical_and(mask_object, bboxs[:,:,2] >= cfg.EPICKITCHENS.BBOX_OBJECT_THRESHOLD)
+            mask_object_threshold = np.logical_and(mask_object, bboxs[:,:,2] >= cfg.EPICKITCHENS.BBOX_OBJECT_THRESHOLD)
+            mask = np.logical_and(mask, mask_object_threshold)
 
         if cfg.EPICKITCHENS.BBOX_HAND:
             mask_hand = np.logical_and(bboxs[:,:,1] == 0, bboxs[:,:,2] >= cfg.EPICKITCHENS.BBOX_HAND_THRESHOLD)

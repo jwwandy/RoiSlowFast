@@ -95,6 +95,9 @@ def process(pid):
                 bbox = obj_detect.bbox 
                 frame_bbox.append([frame_idx_acc, 0.0, obj_detect.score, bbox.left, bbox.top, bbox.right, bbox.bottom])
                
+            if len(frame_bbox) == 0:
+                frame_bbox.append([frame_idx, 1.0, 1.0, 0.0, 0.0, 1.0, 1.0])
+            
             boxes.append(frame_bbox)
             boxes_len.append(len(frame_bbox))
             frame_idx_acc += 1
