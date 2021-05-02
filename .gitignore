@@ -1,3 +1,7 @@
+.vscode/*
+config/*
+slowfast/config/*
+untitled.py
 sftp-config*.json
 *.py[cod]
 /.idea/*

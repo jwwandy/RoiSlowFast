@@ -14,6 +14,9 @@ from slowfast.config.defaults import get_cfg
 
 from test_net import test
 from train_net import train
+from slowfast.models import video_model_builder
+from pdb import set_trace as bp
+from slowfast.datasets import loader
 
 def parse_args():
     """
@@ -112,47 +115,15 @@ def main():
     """
     args = parse_args()
     cfg = load_config(args)
+    model = video_model_builder.SlowFastBbox(cfg)
+    slow_fast = video_model_builder.SlowFast(cfg)
+    model.load_weight_slowfast(slow_fast)
+    inp = [torch.rand((1,3,1,224,224)), torch.rand((1,3,1,224,224))]
+    bbox = torch.rand(20,5)
+    out = model(inp, bboxes=bbox)
+    # bp()
 
     # Perform training.
-    print("Number of GPUS: ", cfg.NUM_GPUS)
-    if cfg.TRAIN.ENABLE:
-        if cfg.NUM_GPUS > 1:
-            torch.multiprocessing.spawn(
-                mpu.run,
-                nprocs=cfg.NUM_GPUS,
-                args=(
-                    cfg.NUM_GPUS,
-                    train,
-                    args.init_method,
-                    cfg.SHARD_ID,
-                    cfg.NUM_SHARDS,
-                    cfg.DIST_BACKEND,
-                    cfg,
-                ),
-                daemon=False,
-            )
-        else:
-            train(cfg=cfg)
-
-    # Perform multi-clip testing.
-    if cfg.TEST.ENABLE:
-        if cfg.NUM_GPUS > 1:
-            torch.multiprocessing.spawn(
-                mpu.run,
-                nprocs=cfg.NUM_GPUS,
-                args=(
-                    cfg.NUM_GPUS,
-                    test,
-                    args.init_method,
-                    cfg.SHARD_ID,
-                    cfg.NUM_SHARDS,
-                    cfg.DIST_BACKEND,
-                    cfg,
-                ),
-                daemon=False,
-            )
-        else:
-            test(cfg=cfg)
 
 
 if __name__ == "__main__":
