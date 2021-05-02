@@ -131,7 +131,8 @@ class SlowFastBbox(nn.Module):
         self.enable_detection = cfg.DETECTION.ENABLE
         self.num_pathways = 2
         self.slow_fast = SlowFast(cfg)
-        pool_size=[[
+        pool_size = _POOL1[cfg.MODEL.ARCH] 
+        model_pool_size=[[
                         cfg.DATA.NUM_FRAMES
                         // cfg.SLOWFAST.ALPHA
                         // pool_size[0][0],
@@ -150,10 +151,7 @@ class SlowFastBbox(nn.Module):
                 cfg.RESNET.WIDTH_PER_GROUP * 32 // cfg.SLOWFAST.BETA_INV,
             ],
             num_classes=cfg.MODEL.NUM_CLASSES, 
-            pool_size=[
-                [1, 1, 1], 
-                [1, 1, 1],
-            ],
+            pool_size=model_pool_size,
             resolution=[[cfg.DETECTION.ROI_XFORM_RESOLUTION] * 2] * 2, 
             scale_factor=[cfg.DETECTION.SPATIAL_SCALE_FACTOR] * 2,
             act_func="softmax",
@@ -168,9 +166,9 @@ class SlowFastBbox(nn.Module):
             slow_fast_model.head = nn.Identity()
             self.slow_fast = slow_fast_model
 
-    def forward(self, x, bboxes=None):
+    def forward(self, x, bboxes=None, masks=None):
         feat = self.slow_fast(x)
-        out = self.bbox_head(x, bboxes=bboxes)
+        out = self.bbox_head(feat, bboxes=bboxes, masks=masks)
         return out
 
     def freeze_fn(self, freeze_mode):
@@ -188,6 +186,11 @@ class SlowFastBbox(nn.Module):
                 if isinstance(m, nn.BatchNorm3d):
                     # shutdown running statistics update in frozen mode
                     m.eval()
+        elif freeze_mode == 'slowfast_bbox':
+            print("Freezing all layers except Bbox head")
+            for n, m in self.named_parameters(): 
+                if 'bbox_head' not in n:
+                    m.requires_grad_(False)
 
 @MODEL_REGISTRY.register()
 class SlowFast(nn.Module):

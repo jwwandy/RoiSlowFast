@@ -23,7 +23,7 @@ parser.add_argument('--pid', type=str)
 args = parser.parse_args()
 
 '''
-python epic_kitchen_bbox_process.py --annotations_dir '/raid/xiaoyuz1/EPIC/epic-annotations' --visual_data_dir '/raid/xiaoyuz1/EPIC/EPIC-KITCHENS' --bbox_annotations_dir '/raid/xiaoyuz1/EPIC/epic-bbox-annotations/all' --anno_format 'annotations_{}.pkl' --pid P01
+python epic_kitchen_bbox_process.py --annotations_dir '/raid/xiaoyuz1/EPIC/epic-annotations' --visual_data_dir '/raid/xiaoyuz1/EPIC/EPIC-KITCHENS' --bbox_annotations_dir '/raid/xiaoyuz1/EPIC/epic-bbox-annotations/all' --anno_format 'annotations_{}.pkl' --pid P03
 '''
 
 # os.path.join(args.annotations_dir, 'EPIC_100_train.pkl')
@@ -47,8 +47,6 @@ def process(pid):
         assert video_record.participant == pid
         vids.add(video_record.untrimmed_video_name)
     vids = list(vids)
-
-    video_bboxs = []
 
     # for video_idx in tqdm(range(len(video_records))):
     for vid_idx in tqdm(range(len(vids))):

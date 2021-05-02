@@ -104,13 +104,13 @@ class ResNetBboxClassifierHead(nn.Module):
                 out = out.permute((0, 2, 1, 3, 4))
                 t_pool = getattr(self, "t{}_pool".format(pathway))
                 # B, C, 1, output_size[0], output_size[1]
-                out_t = t_pool(out)
+                out_t = t_pool(out).squeeze(dim=2)
                 
                 # Perform Spatial Pooling
-                # B, C, 1, output_size[0], output_size[1]
+                # B, C, output_size[0], output_size[1]
                 s_pool = getattr(self, "s{}_pool".format(pathway))
                 # B, C, 1, 1, 1
-                out_s = s_pool(out_t)
+                out_s = s_pool(out_t).unsqueeze(dim=2)
                 # Spatial Pool 出來後 will be B x C x 1 x 1 x 1
 
             else:

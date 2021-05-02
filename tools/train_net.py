@@ -44,7 +44,7 @@ def train_epoch(train_loader, model, optimizer, train_meter, cur_epoch, cfg):
     train_meter.iter_tic()
     data_size = len(train_loader)
 
-    for cur_iter, (inputs, labels, _, meta) in enumerate(train_loader):
+    for cur_iter, (inputs, bboxs, masks, labels, _, meta) in enumerate(train_loader):
         # Transfer the data to the current GPU device.
         if isinstance(inputs, (list,)):
             for i in range(len(inputs)):
@@ -72,7 +72,10 @@ def train_epoch(train_loader, model, optimizer, train_meter, cur_epoch, cfg):
 
         else:
             # Perform the forward pass.
-            preds = model(inputs)
+            if cfg.EPICKITCHENS.USE_BBOX:
+                preds = model(inputs, bboxes=bboxs, masks=masks)
+            else:
+                preds = model(inputs)
 
         if isinstance(labels, (dict,)):
             # Explicitly declare reduction to mean.
@@ -215,8 +218,8 @@ def eval_epoch(val_loader, model, val_meter, cur_epoch, cfg):
     # Evaluation mode enabled. The running stats would not be updated.
     model.eval()
     val_meter.iter_tic()
-
-    for cur_iter, (inputs, labels, _, meta) in enumerate(val_loader):
+    
+    for cur_iter, (inputs, bboxs, masks, labels, _, meta) in enumerate(val_loader):
         # Transferthe data to the current GPU device.
         if isinstance(inputs, (list,)):
             for i in range(len(inputs)):
@@ -251,7 +254,10 @@ def eval_epoch(val_loader, model, val_meter, cur_epoch, cfg):
             # Update and log stats.
             val_meter.update_stats(preds.cpu(), ori_boxes.cpu(), metadata.cpu())
         else:
-            preds = model(inputs)
+            if cfg.EPICKITCHENS.USE_BBOX:
+                preds = model(inputs, bboxes=bboxs, masks=masks)
+            else:
+                preds = model(inputs)
             if isinstance(labels, (dict,)):
                 # Compute the verb accuracies.
                 verb_top1_acc, verb_top5_acc = metrics.topk_accuracies(preds[0], labels['verb'], (1, 5))
