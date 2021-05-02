@@ -232,7 +232,7 @@ def test(cfg):
         os.makedirs(scores_path)
     file_name = 'P{:02d}_{}'.format(int(cfg.EPICKITCHENS.PARTICIPANT_ID), cfg.EPICKITCHENS.TEST_SPLIT)
     file_path = os.path.join(scores_path, file_name + '.pkl')
-    print(scores_path, file_name)
+
     pickle.dump([], open(file_path, 'wb+'))
     preds, labels, metadata = perform_test(test_loader, model, test_meter, cfg)
 
@@ -247,5 +247,3 @@ def test(cfg):
             file_name = 'P{0:02d}_{}'.format(cfg.EPICKITCHENS.PARTICIPANT_ID, cfg.EPICKITCHENS.TEST_SPLIT)
             file_path = os.path.join(scores_path, file_name + '.pkl')
             pickle.dump(results, open(file_path, 'wb'))
-
-            print(scores_path, file_name)

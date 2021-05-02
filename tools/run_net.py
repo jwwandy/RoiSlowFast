@@ -15,7 +15,6 @@ from slowfast.config.defaults import get_cfg
 from test_net import test
 from train_net import train
 
-
 def parse_args():
     """
     Parse the following arguments for the video training and testing pipeline.
