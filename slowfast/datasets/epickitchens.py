@@ -49,6 +49,8 @@ class Epickitchens(torch.utils.data.Dataset):
         """
         Construct the video loader.
         """
+        print("Mode: ", self.mode)
+        print("Val List: ", self.cfg.EPICKITCHENS.VAL_LIST)
         if self.mode == "train":
             path_annotations_pickle = [os.path.join(self.cfg.EPICKITCHENS.ANNOTATIONS_DIR, self.cfg.EPICKITCHENS.TRAIN_LIST)]
         elif self.mode == "val":

@@ -1,3 +1,7 @@
+.vscode/*
+config/*
+slowfast/config/*
+untitled.py
 sftp-config*.json
 *.py[cod]
 /.idea/*
@@ -11,8 +15,11 @@ submit_jobs_jade_*.py
 /scores/
 *.ipynb
 .ipynb_checkpoints/
+<<<<<<< HEAD
 generate_run_sh.py
 run_erin.sh
 test_config.yaml
 configs/*
 config/*
+=======
+>>>>>>> ab4fd536cb62bdf272ca58c3b6897dcc738d8f8c

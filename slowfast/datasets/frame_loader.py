@@ -41,6 +41,7 @@ def pack_frames_to_video_clip(cfg, video_record, temporal_sample_index, target_f
     frame_idx = temporal_sampling(video_record.num_frames,
                                   start_idx, end_idx, num_samples,
                                   start_frame=video_record.start_frame)
+
     img_paths = [os.path.join(path_to_video, img_tmpl.format(idx.item())) for idx in frame_idx]
     frames = utils.retry_load_images(img_paths)
     return frames, frame_idx
