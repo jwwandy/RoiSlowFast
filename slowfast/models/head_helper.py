@@ -74,15 +74,10 @@ class ResNetBboxClassifierHead(nn.Module):
 
             roi_align = getattr(self, "s{}_roi".format(pathway))
             # B*T*N, C, output_size[0], output_size[1]
-            print(input.shape)
             out = roi_align(input, bboxes)
-            print(out.shape)
             '''
             How to concatenate across the N dimension
             '''            
-            # DO SOME MAGIC -> # B, C, T, output_size[0], output_size[1]
-            print(self.resolution)
-            out_p = out.view(1,-1,7,7)
             s_pool = getattr(self, "s{}_spool".format(pathway))
             pool_out.append(s_pool(out_p))
             # Spatial Pool 出來後 will be B x C*T x 1 x 1
