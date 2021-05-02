@@ -29,15 +29,21 @@ class ResNetBboxClassifierHead(nn.Module):
         self.resolution = resolution
         for pathway in range(self.num_pathways):
             # No temporal pooling
-            roi_align = ROIAlign(
-                resolution[pathway],
-                spatial_scale=1.0 / scale_factor[pathway],
-                sampling_ratio=0,
-                aligned=aligned,
-            )
-            self.add_module("s{}_roi".format(pathway), roi_align)
-            spatial_pool = nn.MaxPool2d(resolution[pathway], stride=1)
-            self.add_module("s{}_spool".format(pathway), spatial_pool)
+            if self.num_pathways and pathway == 0:
+                avg_pool = nn.AvgPool3d(pool_size[pathway])
+                self.add_module("avg_pool", avg_pool)
+            else:
+                roi_align = ROIAlign(
+                    resolution[pathway],
+                    spatial_scale=1.0 / scale_factor[pathway],
+                    sampling_ratio=0,
+                    aligned=aligned,
+                )
+                self.add_module("s{}_roi".format(pathway), roi_align)
+                spatial_pool = nn.MaxPool2d(resolution[pathway], stride=1)
+                self.add_module("s{}_pool".format(pathway), spatial_pool)
+                temporal_pool = nn.AvgPool3d(pool_size[pathway], stride=1)
+                self.add_module("t{}_pool".format(pathway), temporal_pool)
 
         if dropout_rate > 0.0:
             self.dropout = nn.Dropout(dropout_rate)
@@ -59,7 +65,11 @@ class ResNetBboxClassifierHead(nn.Module):
         else:
             self.projection = nn.Linear(sum(dim_in), num_classes, bias=True)
 
-    def forward(self, inputs, bboxes):
+    def forward(self, inputs, bboxes, mask):
+        '''
+        bboxes: B*T*N, 5
+        mask: B*T*N,
+        '''
         assert (
             len(inputs) == self.num_pathways
         ), "Input tensor does not contain {} pathway".format(self.num_pathways)
@@ -67,24 +77,52 @@ class ResNetBboxClassifierHead(nn.Module):
         for pathway in range(self.num_pathways):
             input = inputs[pathway]
             assert len(input.shape) == 5
-            # B, C, T, H, W -> B, T, C, H, W
-            input = input.permute((0, 2, 1, 3, 4))
-            # B*T, C, H, W
-            input = input.view(-1, *input.shape[2:])
+            # B, C, T, H, W
+            B, C, T = input.shape[0:3]
+            
+            if self.num_pathways == 2 and pathway == 1:
+                # B, C, T, H, W -> B, T, C, H, W
+                input = input.permute((0, 2, 1, 3, 4))
+                # B*T, C, H, W
+                input = input.view(-1, *input.shape[2:])
+                roi_align = getattr(self, "s{}_roi".format(pathway))
+                # B*T*N, C, output_size[0], output_size[1]
+                out = roi_align(input, bboxes)
+                output_sizes = out.shape[2:4]
 
-            roi_align = getattr(self, "s{}_roi".format(pathway))
-            # B*T*N, C, output_size[0], output_size[1]
-            out = roi_align(input, bboxes)
-            '''
-            How to concatenate across the N dimension
-            '''            
-            s_pool = getattr(self, "s{}_spool".format(pathway))
-            pool_out.append(s_pool(out_p))
-            # Spatial Pool 出來後 will be B x C*T x 1 x 1
+                # B*T*N, 1, 1, 1
+                mask = mask.view(-1, 1, 1, 1)
+                out = out * mask
+                # B, T, N, C, output_size[0], output_size[1]
+                out = out.view(B, T, len(mask)//(B*T), C, output_sizes[0], output_sizes[1])
+                mask_denom = mask.view(B, T, -1).sum(2)
+                mask_denom = mask_denom.view(B, T, 1, 1, 1)
+                # B, T, C, output_size[0], output_size[1]
+                out = out.sum(2) / mask_denom
+                # Perform Temporal Pooling
+                # B, T, C, output_size[0], output_size[1] ->  B, C, T, output_size[0], output_size[1]
+                out = out.permute((0, 2, 1, 3, 4))
+                t_pool = getattr(self, "t{}_pool".format(pathway))
+                # B, C, 1, output_size[0], output_size[1]
+                out_t = t_pool(out)
+                
+                # Perform Spatial Pooling
+                # B, C, 1, output_size[0], output_size[1]
+                s_pool = getattr(self, "s{}_pool".format(pathway))
+                # B, C, 1, 1, 1
+                out_s = s_pool(out_t)
+                # Spatial Pool 出來後 will be B x C x 1 x 1 x 1
 
-        # B C*T H W.
+            else:
+                # B, C, T, H, W
+                avg_pool = getattr(self, "avg_pool")
+                # B, C, 1, 1, 1
+                out_s = avg_pool(input)
+                
+            pool_out.append(out_s)
+
+        # B x Cs x 1 x 1 x 1
         x = torch.cat(pool_out, 1)
-        x = x.view(1, sum(self.dim_in) // 64, -1, 1, 1)
         # (N, C, T, H, W) -> (N, T, H, W, C).
         x = x.permute((0, 2, 3, 4, 1))
         # Perform dropout.
