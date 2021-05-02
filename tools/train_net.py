@@ -366,11 +366,13 @@ def train(cfg):
 
     # Build the video model and print model statistics.
     model = build_model(cfg)
-    if du.is_master_proc():
-        misc.log_model_info(model, cfg, is_train=True)
+    # if du.is_master_proc():
+    #     misc.log_model_info(model, cfg, is_train=True)
 
     if cfg.BN.FREEZE:
-        model.module.freeze_fn('bn_parameters')
+        model.freeze_fn('bn_parameters')
+    if cfg.EPICKITCHENS.USE_BBOX:
+        model.freeze_fn('slowfast_bbox')
 
     # Construct the optimizer.
     optimizer = optim.construct_optimizer(model, cfg)

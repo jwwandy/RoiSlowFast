@@ -5,9 +5,6 @@ import argparse
 import sys
 import torch
 import pickle
-import slowfast.utils.checkpoint as cu
-import slowfast.utils.multiprocessing as mpu
-from slowfast.config.defaults import get_cfg
 from slowfast.datasets.epickitchens_record import EpicKitchensVideoRecord
 from slowfast.datasets.epic_kitchens_bbox.hoa import load_detections, DetectionRenderer
 from tqdm import tqdm
@@ -18,12 +15,13 @@ parser.add_argument('--annotations_dir', type=str)
 parser.add_argument('--visual_data_dir', type=str)
 parser.add_argument('--bbox_annotations_dir', type=str)
 parser.add_argument('--anno_format', type=str)
-parser.add_argument('--pid', type=str)
+parser.add_argument('--anno_file', type=str)
+# parser.add_argument('--pid', type=str)
 
 args = parser.parse_args()
 
 '''
-python epic_kitchen_bbox_process.py --annotations_dir '/raid/xiaoyuz1/EPIC/epic-annotations' --visual_data_dir '/raid/xiaoyuz1/EPIC/EPIC-KITCHENS' --bbox_annotations_dir '/raid/xiaoyuz1/EPIC/epic-bbox-annotations/all' --anno_format 'annotations_{}.pkl' --pid P03
+python epic_kitchen_bbox_process.py --annotations_dir '/raid/xiaoyuz1/EPIC/epic-annotations' --visual_data_dir '/raid/xiaoyuz1/EPIC/EPIC-KITCHENS' --bbox_annotations_dir '/raid/xiaoyuz1/EPIC/epic-bbox-annotations/all' --anno_file /raid/xiaoyuz1/EPIC/epic-annotations/annotations_slowfast_val2.pkl --anno_format 'annotations_{}.pkl'
 '''
 
 # os.path.join(args.annotations_dir, 'EPIC_100_train.pkl')
@@ -32,26 +30,14 @@ python epic_kitchen_bbox_process.py --annotations_dir '/raid/xiaoyuz1/EPIC/epic-
 
 
 # 'annotations_train_{}.pkl'
-def process(pid):
-    formatter = args.anno_format
-    path_to_records = os.path.join(args.annotations_dir, formatter.format(pid))
-    video_records = []
-    for tup in pd.read_pickle(path_to_records).iterrows():
-        tup_record = EpicKitchensVideoRecord(tup)
-        video_records.append(tup_record)
-
-    # path_to_bbox_dir = '{}/{}/hand-objects'.format('/raid/xiaoyuz1/EPIC/EPIC-KITCHENS',pid)
-    
-    vids = set()
-    for video_record in video_records:
-        assert video_record.participant == pid
-        vids.add(video_record.untrimmed_video_name)
-    vids = list(vids)
+def process(fname):
+    pkl = pd.read_pickle(fname)   
+    vids = pkl.video_id.unique()
 
     # for video_idx in tqdm(range(len(video_records))):
     for vid_idx in tqdm(range(len(vids))):
         vid = vids[vid_idx]
-
+        pid = vid.split('_')[0]
         path_to_bbox = '{}/{}/hand-objects/{}.pkl'.format(args.visual_data_dir,
                                                  pid,
                                                  vid)
@@ -106,7 +92,7 @@ def process(pid):
             frame_bbox_padded = frame_bbox + [[frame_idx, 1.0, 0.0, 0.0, 0.0, 1.0, 1.0]] * (max_num_bbox_per_frame - boxes_len[frame_idx])
             padded_boxes.append(frame_bbox_padded)
     
-        with open(os.path.join(args.bbox_annotations_dir, formatter.format(vid)), 'wb+') as f:
+        with open(os.path.join(args.bbox_annotations_dir, args.anno_format.format(vid)), 'wb+') as f:
             pickle.dump((np.asarray(padded_boxes), np.asarray(boxes_len)), f)
         
 
@@ -115,4 +101,4 @@ def process(pid):
 
 # for pid in pkl_val.participant_id.unique():
 #     process('annotations_val_{}.pkl', pid)
-process(args.pid)
+process(args.anno_file)

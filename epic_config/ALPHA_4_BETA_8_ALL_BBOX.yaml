@@ -1,7 +1,7 @@
 TRAIN:
   ENABLE: True
   DATASET: epickitchens
-  BATCH_SIZE: 8
+  BATCH_SIZE: 4
   EVAL_PERIOD: 2
   CHECKPOINT_PERIOD: 1
   CHECKPOINT_TYPE: caffe2
@@ -53,7 +53,7 @@ SOLVER:
 MODEL:
   NUM_CLASSES: [97, 300]
   ARCH: slowfast
-  MODEL_NAME: SlowFast
+  MODEL_NAME: SlowFastBbox
   LOSS_FUNC: cross_entropy
   DROPOUT_RATE: 0.5
 TEST:

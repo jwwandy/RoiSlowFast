@@ -11,7 +11,7 @@ import torch
 import slowfast.utils.checkpoint as cu
 import slowfast.utils.distributed as du
 import slowfast.utils.logging as logging
-# import slowfast.utils.misc as misc
+import slowfast.utils.misc as misc
 from slowfast.datasets import loader
 from slowfast.models import build_model
 from slowfast.utils.meters import AVAMeter, TestMeter, EPICTestMeter
@@ -41,7 +41,7 @@ def perform_test(test_loader, model, test_meter, cfg):
 
     test_meter.iter_tic()
 
-    for cur_iter, (inputs, labels, video_idx, meta) in enumerate(test_loader):
+    for cur_iter, (inputs, bboxs, masks, labels, video_idx, meta) in enumerate(test_loader):
         # Transfer the data to the current GPU device.
         if isinstance(inputs, (list,)):
             for i in range(len(inputs)):
@@ -86,7 +86,10 @@ def perform_test(test_loader, model, test_meter, cfg):
             test_meter.log_iter_stats(None, cur_iter)
         else:
             # Perform the forward pass.
-            preds = model(inputs)
+            if cfg.EPICKITCHENS.USE_BBOX:
+                preds = model(inputs, bboxes=bboxs, masks=masks)
+            else:
+                preds = model(inputs)
 
             if isinstance(labels, (dict,)):
                 # Gather all the predictions across all the devices to perform ensemble.
@@ -176,11 +179,6 @@ def test(cfg):
             inflation=False,
             convert_from_caffe2=cfg.TEST.CHECKPOINT_TYPE == "caffe2",
         )
-        ###
-
-        #### 
-
-        ###
     elif cu.has_checkpoint(cfg.OUTPUT_DIR):
         last_checkpoint = cu.get_last_checkpoint(cfg.OUTPUT_DIR)
         cu.load_checkpoint(last_checkpoint, model, cfg.NUM_GPUS > 1)
@@ -235,8 +233,8 @@ def test(cfg):
     scores_path = os.path.join(cfg.OUTPUT_DIR, 'scores')
     if not os.path.exists(scores_path):
         os.makedirs(scores_path)
-    file_name = 'P{:02d}_{}'.format(int(cfg.EPICKITCHENS.PARTICIPANT_ID), cfg.EPICKITCHENS.TEST_SPLIT)
-    file_path = os.path.join(scores_path, file_name + '.pkl')
+    file_name = '{}.pkl'.format(cfg.EPICKITCHENS.TEST_SPLIT) #'P{:02d}_{}'.format(int(cfg.EPICKITCHENS.PARTICIPANT_ID), cfg.EPICKITCHENS.TEST_SPLIT)
+    file_path = os.path.join(scores_path, file_name)
 
     pickle.dump([], open(file_path, 'wb+'))
     preds, labels, metadata = perform_test(test_loader, model, test_meter, cfg)
@@ -251,6 +249,6 @@ def test(cfg):
             scores_path = os.path.join(cfg.OUTPUT_DIR, 'scores')
             if not os.path.exists(scores_path):
                 os.makedirs(scores_path)
-            file_name = 'P{0:02d}_{}'.format(cfg.EPICKITCHENS.PARTICIPANT_ID, cfg.EPICKITCHENS.TEST_SPLIT)
-            file_path = os.path.join(scores_path, file_name + '.pkl')
+            file_name = '{}.pkl'.format(cfg.EPICKITCHENS.TEST_SPLIT)
+            file_path = os.path.join(scores_path, file_name)
             pickle.dump(results, open(file_path, 'wb'))
