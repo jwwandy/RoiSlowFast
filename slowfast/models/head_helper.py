@@ -65,6 +65,7 @@ class ResNetRoIHead(nn.Module):
         assert (
             len({len(pool_size), len(dim_in)}) == 1
         ), "pathway dimensions are not consistent."
+        
         self.num_pathways = len(pool_size)
         for pathway in range(self.num_pathways):
             temporal_pool = nn.AvgPool3d(
@@ -124,9 +125,9 @@ class ResNetRoIHead(nn.Module):
         if hasattr(self, "dropout"):
             x = self.dropout(x)
 
-        x = x.view(x.shape[0], -1)
-        x = self.projection(x)
-        x = self.act(x)
+        # x = x.view(x.shape[0], -1)
+        # x = self.projection(x)
+        # x = self.act(x)
         return x
 
 

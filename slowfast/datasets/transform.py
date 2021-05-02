@@ -53,7 +53,7 @@ def random_short_side_scale_jitter(images, min_size, max_size, boxes=None):
     )
 
 
-def crop_boxes(boxes, x_offset, y_offset):
+def crop_boxes(boxes, x_offset, y_offset, size_width, size_height):
     """
     Peform crop on the bounding boxes given the offsets.
     Args:
@@ -68,6 +68,9 @@ def crop_boxes(boxes, x_offset, y_offset):
     cropped_boxes = boxes.copy()
     cropped_boxes[:, [0, 2]] = boxes[:, [0, 2]] - x_offset
     cropped_boxes[:, [1, 3]] = boxes[:, [1, 3]] - y_offset
+
+    cropped_boxes[:,[0,2]] = np.clip(cropped_boxes[:,[0,2]], 0, size_width)
+    cropped_boxes[:,[1,3]] = np.clip(cropped_boxes[:,[1,3]], 0, size_height)
 
     return cropped_boxes
 
@@ -102,7 +105,7 @@ def random_crop(images, size, boxes=None):
     ]
 
     cropped_boxes = (
-        crop_boxes(boxes, x_offset, y_offset) if boxes is not None else None
+        crop_boxes(boxes, x_offset, y_offset, size, size) if boxes is not None else None
     )
 
     return cropped, cropped_boxes
@@ -178,7 +181,7 @@ def uniform_crop(images, size, spatial_idx, boxes=None):
     ]
 
     cropped_boxes = (
-        crop_boxes(boxes, x_offset, y_offset) if boxes is not None else None
+        crop_boxes(boxes, x_offset, y_offset,size, size) if boxes is not None else None
     )
 
     return cropped, cropped_boxes

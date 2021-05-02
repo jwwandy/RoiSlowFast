@@ -11,7 +11,7 @@ import torch
 import slowfast.utils.checkpoint as cu
 import slowfast.utils.distributed as du
 import slowfast.utils.logging as logging
-import slowfast.utils.misc as misc
+# import slowfast.utils.misc as misc
 from slowfast.datasets import loader
 from slowfast.models import build_model
 from slowfast.utils.meters import AVAMeter, TestMeter, EPICTestMeter
@@ -115,7 +115,7 @@ def perform_test(test_loader, model, test_meter, cfg):
                     metadata,
                     video_idx.detach().cpu(),
                 )
-                test_meter.log_iter_stats(cur_iter)
+                # test_meter.log_iter_stats(cur_iter)
             else:
                 # Gather all the predictions across all the devices to perform ensemble.
                 if cfg.NUM_GPUS > 1:
@@ -130,7 +130,7 @@ def perform_test(test_loader, model, test_meter, cfg):
                     labels.detach().cpu(),
                     video_idx.detach().cpu(),
                 )
-                test_meter.log_iter_stats(cur_iter)
+                # test_meter.log_iter_stats(cur_iter)
 
         test_meter.iter_tic()
 
@@ -163,8 +163,8 @@ def test(cfg):
 
     # Build the video model and print model statistics.
     model = build_model(cfg)
-    if du.is_master_proc():
-        misc.log_model_info(model, cfg, is_train=False)
+    # if du.is_master_proc():
+        # misc.log_model_info(model, cfg, is_train=False)
 
     # Load a checkpoint to test if applicable.
     if cfg.TEST.CHECKPOINT_FILE_PATH != "":
@@ -176,6 +176,11 @@ def test(cfg):
             inflation=False,
             convert_from_caffe2=cfg.TEST.CHECKPOINT_TYPE == "caffe2",
         )
+        ###
+
+        #### 
+
+        ###
     elif cu.has_checkpoint(cfg.OUTPUT_DIR):
         last_checkpoint = cu.get_last_checkpoint(cfg.OUTPUT_DIR)
         cu.load_checkpoint(last_checkpoint, model, cfg.NUM_GPUS > 1)
@@ -233,6 +238,8 @@ def test(cfg):
         if cfg.TEST.DATASET == 'epickitchens':
             results = {'verb_output': preds[0],
                        'noun_output': preds[1],
+                       'verb_gt': labels[0],
+                       'noun_gt': labels[1],
                        'narration_id': metadata}
             scores_path = os.path.join(cfg.OUTPUT_DIR, 'scores')
             if not os.path.exists(scores_path):

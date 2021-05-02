@@ -2,30 +2,30 @@
 # Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved.
 
 """Configs."""
-# from fvcore.common.config import CfgNode
+from fvcore.common.config import CfgNode
 import yaml 
 import copy
-class CfgNode(object):
-    def __init__(self, cfg=None):
-        if cfg is not None:
-            for k, v in cfg.items():
-                if isinstance(v, dict):
-                    setattr(self, k, CfgNode(v))
-                else:
-                    setattr(self, k, v)
+# class CfgNode(object):
+#     def __init__(self, cfg=None):
+#         if cfg is not None:
+#             for k, v in cfg.items():
+#                 if isinstance(v, dict):
+#                     setattr(self, k, CfgNode(v))
+#                 else:
+#                     setattr(self, k, v)
 
-    def update(self, cfg):
-        for k, v in cfg.items():
-            if isinstance(v, dict):
-                if hasattr(self, k):
-                    if isinstance(getattr(self, k), CfgNode):
-                        getattr(self, k).update(v)
-                    else:
-                        raise TypeError("Previously not dict but update with dict")
-                else:
-                    setattr(self, k, CfgNode(v))
-            else:
-                setattr(self, k, v)
+#     def update(self, cfg):
+#         for k, v in cfg.items():
+#             if isinstance(v, dict):
+#                 if hasattr(self, k):
+#                     if isinstance(getattr(self, k), CfgNode):
+#                         getattr(self, k).update(v)
+#                     else:
+#                         raise TypeError("Previously not dict but update with dict")
+#                 else:
+#                     setattr(self, k, CfgNode(v))
+#             else:
+#                 setattr(self, k, v)
 
 # -----------------------------------------------------------------------------
 # Config definition
@@ -479,6 +479,18 @@ _C.EPICKITCHENS.TEST_SPLIT = "validation"
 
 _C.EPICKITCHENS.TRAIN_PLUS_VAL = False
 
+_C.EPICKITCHENS.SEGMENT_MIN_LENGTH = 1
+
+_C.EPICKITCHENS.SEGMENT_MAX_LENGTH = 64
+
+_C.EPICKITCHENS.USE_BBOX = True
+_C.EPICKITCHENS.BBOX_HAND = True
+_C.EPICKITCHENS.BBOX_HAND_THRESHOLD = 0.0
+_C.EPICKITCHENS.BBOX_OBJECT = True
+_C.EPICKITCHENS.BBOX_OBJECT_THRESHOLD = 0.0
+_C.EPICKITCHENS.BBOX_ACTIVE_OBJECT = False
+
+_C.EPICKITCHENS.BBOX_ANNOTATIONS_DIR = ""
 
 def _assert_and_infer_cfg(cfg):
     # BN assertions.
@@ -503,14 +515,14 @@ def _assert_and_infer_cfg(cfg):
     return cfg
 
 
-# def get_cfg():
-#     """
-#     Get a copy of the default config.
-#     """
-#     return _assert_and_infer_cfg(_C.clone())
-
 def get_cfg():
     """
     Get a copy of the default config.
     """
-    return copy.deepcopy(_C)
+    return _assert_and_infer_cfg(_C.clone())
+
+# def get_cfg():
+#     """
+#     Get a copy of the default config.
+#     """
+#     return copy.deepcopy(_C)

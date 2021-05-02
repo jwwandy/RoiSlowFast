@@ -12,6 +12,71 @@ from torch.utils.data.sampler import RandomSampler
 
 from .build import build_dataset
 
+def pad_epic_bbox(bbox, mask, target_len):
+    T,N,_ = bbox.shape
+    trans_bboxs = bbox.clone().permute((1,0,2)) 
+    pad_len = target_len - N
+    base_case = torch.tensor([0., 0., 1., 1.])
+    bbox_pad = base_case.repeat(pad_len * T).view((pad_len, T ,4))
+    padded_bboxs = torch.cat([trans_bboxs, bbox_pad], dim=0).permute((1,0,2)) #(target_len,T,4) --> (T,target_len,4)
+
+    padded_mask = mask.clone() #(T,N)
+    mask_pad = torch.zeros((T, pad_len)).float() #(T,pad_len)
+    padded_mask = torch.cat([padded_mask, mask_pad], dim=1)  #(T,target_len)
+    
+    # Add indices to the padded bbox 
+    # (T,target_len,4) --> (T,target_len,5)
+    padded_bboxs = padded_bboxs.contiguous()
+
+    padded_bboxs_flat = padded_bboxs.view(-1,4) #(T*target_len,4)
+    indices = torch.arange(T).repeat(target_len).view((target_len,T)).T.flatten().view(-1,1)
+    padded_bboxs_with_indices = torch.cat([indices, padded_bboxs_flat], dim=1).view((T,target_len,5))
+
+    return padded_bboxs_with_indices, padded_mask
+
+
+def epic_bbox_collate(batch):
+    """
+    Collate function for detection task. Concatanate bboxes, labels and
+    metadata from different samples in the first dimension instead of
+    stacking them to have a batch-size dimension.
+    Args:
+        batch (tuple or list): data batch to collate.
+    Returns:
+        (tuple): collated detection data batch.
+    """
+    inputs, all_bboxs, all_masks, labels, video_idx, extra_data = zip(*batch)
+    inputs, video_idx = default_collate(inputs), default_collate(video_idx)
+    # labels = torch.tensor(np.concatenate(labels, axis=0)).float()
+    labels = default_collate(labels)
+    extra_data = default_collate(extra_data)
+
+    
+    all_bboxs_padded = []
+    all_masks_padded = []
+    B = len(all_masks)
+    max_N = np.max([len(fast_t) for fast_t,_ in all_bboxs])
+    
+    # Pad each bbox tensor 
+    idx_acc = 0
+    for batch_idx in range(B):
+        fast_bbox, _ = all_bboxs[batch_idx]
+        fast_mask, _ = all_masks[batch_idx]
+        
+        T,_,_ = fast_bbox.shape
+        padded_bboxs_with_indices, padded_mask = pad_epic_bbox(fast_bbox, fast_mask, max_N)
+        padded_bboxs_with_indices[:,:,0] += idx_acc
+
+        all_bboxs_padded.append(padded_bboxs_with_indices)
+        all_masks_padded.append(padded_mask)
+        idx_acc += T
+    
+    fast_bboxs_collated = torch.cat(all_bboxs_padded, dim=0).view(-1,5)
+    fast_mask_collated = torch.cat(all_masks_padded, dim=0).flatten()#.view(-1,1)
+
+    return inputs, fast_bboxs_collated, fast_mask_collated, labels, video_idx, extra_data
+
+
 
 def detection_collate(batch):
     """
@@ -62,17 +127,17 @@ def construct_loader(cfg, split):
     assert split in ["train", "val", "test", "train+val"]
     if split in ["train", "train+val"]:
         dataset_name = cfg.TRAIN.DATASET
-        batch_size = int(cfg.TRAIN.BATCH_SIZE / cfg.NUM_GPUS)
+        batch_size = int(cfg.TRAIN.BATCH_SIZE / max(cfg.NUM_GPUS, 1))
         shuffle = True
         drop_last = True
     elif split in ["val"]:
         dataset_name = cfg.TRAIN.DATASET
-        batch_size = int(cfg.TRAIN.BATCH_SIZE / cfg.NUM_GPUS)
+        batch_size = int(cfg.TRAIN.BATCH_SIZE / max(cfg.NUM_GPUS, 1))
         shuffle = False
         drop_last = False
     elif split in ["test"]:
         dataset_name = cfg.TEST.DATASET
-        batch_size = int(cfg.TEST.BATCH_SIZE / cfg.NUM_GPUS)
+        batch_size = int(cfg.TEST.BATCH_SIZE / max(cfg.NUM_GPUS, 1))
         shuffle = False
         drop_last = False
 
@@ -81,6 +146,13 @@ def construct_loader(cfg, split):
     # Create a sampler for multi-process training
     sampler = DistributedSampler(dataset) if cfg.NUM_GPUS > 1 else None
     # Create a loader
+    
+    if cfg.DETECTION.ENABLE:
+        collate_func = detection_collate
+    elif cfg.EPICKITCHENS.USE_BBOX:
+        collate_func = epic_bbox_collate
+    else:
+        collate_func = None
     loader = torch.utils.data.DataLoader(
         dataset,
         batch_size=batch_size,
@@ -89,7 +161,7 @@ def construct_loader(cfg, split):
         num_workers=cfg.DATA_LOADER.NUM_WORKERS,
         pin_memory=cfg.DATA_LOADER.PIN_MEMORY,
         drop_last=drop_last,
-        collate_fn=detection_collate if cfg.DETECTION.ENABLE else None,
+        collate_fn=collate_func,
     )
     return loader
 

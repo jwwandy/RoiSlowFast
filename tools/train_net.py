@@ -364,7 +364,7 @@ def train(cfg):
         misc.log_model_info(model, cfg, is_train=True)
 
     if cfg.BN.FREEZE:
-        model.freeze_fn('bn_parameters')
+        model.module.freeze_fn('bn_parameters')
 
     # Construct the optimizer.
     optimizer = optim.construct_optimizer(model, cfg)

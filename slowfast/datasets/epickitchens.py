@@ -1,5 +1,6 @@
 import os
 import pandas as pd
+import numpy as np
 import torch
 import torch.utils.data
 
@@ -7,6 +8,7 @@ import slowfast.utils.logging as logging
 
 from .build import DATASET_REGISTRY
 from .epickitchens_record import EpicKitchensVideoRecord
+from .epickitchens_bbox import load_precomputed_bbox, refine_mask_by_filter_out_zero_mask
 
 from . import transform as transform
 from . import utils as utils
@@ -62,13 +64,23 @@ class Epickitchens(torch.utils.data.Dataset):
                 file
             )
 
+        self.video_ids = set()
         self._video_records = []
         self._spatial_temporal_idx = []
         for file in path_annotations_pickle:
             for tup in pd.read_pickle(file).iterrows():
+                tup_record = EpicKitchensVideoRecord(tup)
+                self.video_ids.add(tup_record.untrimmed_video_name)
+                if not (tup_record.num_frames >= self.cfg.EPICKITCHENS.SEGMENT_MIN_LENGTH or \
+                    tup_record.num_frames <= self.cfg.EPICKITCHENS.SEGMENT_MAX_LENGTH):
+                    continue
                 for idx in range(self._num_clips):
-                    self._video_records.append(EpicKitchensVideoRecord(tup))
+                    self._video_records.append(tup_record)
                     self._spatial_temporal_idx.append(idx)
+        
+        self.video_ids = list(self.video_ids)
+        self.bboxs_dict, self.mask_dict = load_precomputed_bbox(self.cfg, self.video_ids)
+        
         assert (
                 len(self._video_records) > 0
         ), "Failed to load EPIC-KITCHENS split {} from {}".format(
@@ -80,21 +92,7 @@ class Epickitchens(torch.utils.data.Dataset):
             )
         )
 
-    def __getitem__(self, index):
-        """
-        Given the video index, return the list of frames, label, and video
-        index if the video can be fetched and decoded successfully, otherwise
-        repeatly find a random video that can be decoded as a replacement.
-        Args:
-            index (int): the video index provided by the pytorch sampler.
-        Returns:
-            frames (tensor): the frames of sampled from the video. The dimension
-                is `channel` x `num frames` x `height` x `width`.
-            label (int): the label of the current video.
-            index (int): if the video provided by pytorch sampler can be
-                decoded, then return the index of the video. If not, return the
-                index of the video replacement that can be decoded.
-        """
+    def get_frames_sample_info(self, index):
         if self.mode in ["train", "val", "train+val"]:
             # -1 indicates random sampling.
             temporal_sample_index = -1
@@ -125,9 +123,49 @@ class Epickitchens(torch.utils.data.Dataset):
             raise NotImplementedError(
                 "Does not support {} mode".format(self.mode)
             )
-
-        frames = pack_frames_to_video_clip(self.cfg, self._video_records[index], temporal_sample_index)
         
+        return temporal_sample_index, spatial_sample_index, min_scale, max_scale, crop_size
+    
+    def __getitem__(self, index):
+        """
+        Given the video index, return the list of frames, label, and video
+        index if the video can be fetched and decoded successfully, otherwise
+        repeatly find a random video that can be decoded as a replacement.
+        Args:
+            index (int): the video index provided by the pytorch sampler.
+        Returns:
+            frames (tensor): the frames of sampled from the video. The dimension
+                is `channel` x `num frames` x `height` x `width`.
+            label (int): the label of the current video.
+            index (int): if the video provided by pytorch sampler can be
+                decoded, then return the index of the video. If not, return the
+                index of the video replacement that can be decoded.
+        """
+        
+        temporal_sample_index, spatial_sample_index, min_scale, max_scale, crop_size = self.get_frames_sample_info(index)
+        frames,frame_idx = pack_frames_to_video_clip(self.cfg, self._video_records[index], temporal_sample_index)
+        # frames: (T,256,456,C)
+
+        bboxs = None
+        mask = None
+        if self.cfg.EPICKITCHENS.USE_BBOX:
+            vid = self._video_records[index].untrimmed_video_name
+            vid_bbox = self.bboxs_dict.get(vid, None)
+            mask_bbox = self.mask_dict.get(vid, None)
+            if not vid_bbox is None:
+                bboxs = vid_bbox[frame_idx]
+                mask = mask_bbox[frame_idx] #(T,max_len)
+        
+            # Scale bbox from [0,1]  to [0,H] or [0,W]
+            T,H,W,_ = frames.shape
+            bboxs[:,:,0] *= W
+            bboxs[:,:,1] *= H
+            bboxs[:,:,2] *= W
+            bboxs[:,:,3] *= H
+        else:
+            bboxs = None
+            mask = None
+
         # Perform color normalization.
         frames = frames.float()
         frames = frames / 255.0
@@ -136,8 +174,9 @@ class Epickitchens(torch.utils.data.Dataset):
         # T H W C -> C T H W.
         frames = frames.permute(3, 0, 1, 2)
         # Perform data augmentation.
-        frames = self.spatial_sampling(
+        frames,bboxs = self.spatial_sampling(
             frames,
+            bboxs = bboxs,
             spatial_idx=spatial_sample_index,
             min_scale=min_scale,
             max_scale=max_scale,
@@ -147,7 +186,35 @@ class Epickitchens(torch.utils.data.Dataset):
         label = self._video_records[index].label
         frames = utils.pack_pathway_output(self.cfg, frames)
         metadata = self._video_records[index].metadata
-        return frames, label, index, metadata
+        
+        if bboxs is not None and mask is not None:
+            has_no_area, mask = refine_mask_by_filter_out_zero_mask(bboxs, mask)
+            bboxs[has_no_area] = np.array([0.0, 0.0, crop_size, crop_size])
+            bboxs[:,:,0] /= W
+            bboxs[:,:,1] /= H
+            bboxs[:,:,2] /= W
+            bboxs[:,:,3] /= H
+
+            fast_bboxs = bboxs.copy()
+            fast_mask = mask.copy()
+            
+            if self.cfg.MODEL.ARCH in self.cfg.MODEL.SINGLE_PATHWAY_ARCH:
+                all_bboxs = [torch.FloatTensor(fast_bboxs)]
+                all_masks = [torch.FloatTensor(fast_mask)]
+            else:
+                slow_bboxs = bboxs.copy()
+                select_slow_idx = np.linspace(0, frames[1].shape[1]-1, frames[1].shape[1] // self.cfg.SLOWFAST.ALPHA).astype(int)
+                slow_bboxs = slow_bboxs[select_slow_idx]
+
+                slow_mask = mask.copy()
+                slow_mask = slow_mask[select_slow_idx]
+
+                all_bboxs = [torch.FloatTensor(slow_bboxs), torch.FloatTensor(fast_bboxs)]
+                all_masks = [torch.FloatTensor(slow_mask), torch.FloatTensor(fast_mask)]
+
+            return frames, all_bboxs, all_masks, label, index, metadata
+        else:
+            return frames, label, index, metadata
 
 
     def __len__(self):
@@ -156,6 +223,7 @@ class Epickitchens(torch.utils.data.Dataset):
     def spatial_sampling(
             self,
             frames,
+            bboxs = None,
             spatial_idx=-1,
             min_scale=256,
             max_scale=320,
@@ -181,18 +249,27 @@ class Epickitchens(torch.utils.data.Dataset):
             frames (tensor): spatially sampled frames.
         """
         assert spatial_idx in [-1, 0, 1, 2]
+        # bboxs_4: (T,max_len,4)
+        if not bboxs is None:
+            bboxs_4 = bboxs.reshape((-1,4))
+        else:
+            bboxs_4 = None
         if spatial_idx == -1:
-            frames, _ = transform.random_short_side_scale_jitter(
-                frames, min_scale, max_scale
+            frames, bboxs_4 = transform.random_short_side_scale_jitter(
+                frames, min_scale, max_scale, boxes=bboxs_4
             )
-            frames, _ = transform.random_crop(frames, crop_size)
-            frames, _ = transform.horizontal_flip(0.5, frames)
+            frames, bboxs_4 = transform.random_crop(frames, crop_size, boxes=bboxs_4)
+            frames, bboxs_4 = transform.horizontal_flip(0.5, frames, boxes=bboxs_4)
         else:
             # The testing is deterministic and no jitter should be performed.
             # min_scale, max_scale, and crop_size are expect to be the same.
             assert len({min_scale, max_scale, crop_size}) == 1
-            frames, _ = transform.random_short_side_scale_jitter(
-                frames, min_scale, max_scale
+            frames, bboxs_4 = transform.random_short_side_scale_jitter(
+                frames, min_scale, max_scale, boxes=bboxs_4
             )
-            frames, _ = transform.uniform_crop(frames, crop_size, spatial_idx)
-        return frames
+            frames, bboxs_4 = transform.uniform_crop(frames, crop_size, spatial_idx, boxes=bboxs_4)
+        
+        if not bboxs is None:
+            bboxs = bboxs_4.reshape((len(bboxs), -1, 4))
+        
+        return frames, bboxs
