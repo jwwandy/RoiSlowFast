@@ -11,3 +11,6 @@ submit_jobs_jade_*.py
 /scores/
 *.ipynb
 .ipynb_checkpoints/
+generate_run_sh.py
+run_erin.sh
+test_config.yaml
