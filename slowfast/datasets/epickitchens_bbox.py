@@ -77,8 +77,8 @@ def load_precomputed_bbox(cfg, video_ids):
         
         # mask = np.repeat(mask.reshape((-1,max_len,1)), last_dim, axis=2)
         # bboxs = mask * bboxs
-        bboxs_dict[vid] = bboxs[:,:,-4:]
-        mask_dict[vid] = mask
+        bboxs_dict[vid] = bboxs[:,:,-4:] #(num_frame_in_video, max_num_frames, 4)
+        mask_dict[vid] = mask #(num_frame_in_video, max_num_frames)
 
     return bboxs_dict, mask_dict
         

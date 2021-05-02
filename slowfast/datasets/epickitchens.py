@@ -183,9 +183,13 @@ class Epickitchens(torch.utils.data.Dataset):
         label = self._video_records[index].label
         frames = utils.pack_pathway_output(self.cfg, frames)
         metadata = self._video_records[index].metadata
-
         has_no_area, mask = refine_mask_by_filter_out_zero_mask(bboxs, mask)
         bboxs[has_no_area] = np.array([0.0, 0.0, crop_size, crop_size])
+        bboxs[:,:,0] /= W
+        bboxs[:,:,1] /= H
+        bboxs[:,:,2] /= W
+        bboxs[:,:,3] /= H
+
         fast_bboxs = bboxs.copy()
         fast_mask = mask.copy()
         
@@ -194,14 +198,14 @@ class Epickitchens(torch.utils.data.Dataset):
             all_masks = [torch.FloatTensor(fast_mask)]
         else:
             slow_bboxs = bboxs.copy()
-            select_slow_idx = np.linspace(0, frames[1].shape[1]-1, frames[1].shape[1] // cfg.SLOWFAST.ALPHA).astype(int)
+            select_slow_idx = np.linspace(0, frames[1].shape[1]-1, frames[1].shape[1] // self.cfg.SLOWFAST.ALPHA).astype(int)
             slow_bboxs = slow_bboxs[select_slow_idx]
 
             slow_mask = mask.copy()
             slow_mask = slow_mask[select_slow_idx]
 
-            all_bboxs = [torch.FloatTensor(fast_bboxs), torch.FloatTensor(slow_bboxs)]
-            all_masks = [torch.FloatTensor(fast_mask), torch.FloatTensor(slow_mask)]
+            all_bboxs = [torch.FloatTensor(slow_bboxs), torch.FloatTensor(fast_bboxs)]
+            all_masks = [torch.FloatTensor(slow_mask), torch.FloatTensor(fast_mask)]
 
         return frames, all_bboxs, all_masks, label, index, metadata
 
