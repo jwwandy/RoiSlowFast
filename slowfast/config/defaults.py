@@ -90,6 +90,10 @@ _C.TRAIN.CHECKPOINT_TYPE = "pytorch"
 # If True, perform inflation when loading checkpoint.
 _C.TRAIN.CHECKPOINT_INFLATE = False
 
+_C.TRAIN.NUM_ENSEMBLE_VIEWS = 3
+_C.TRAIN.NUM_SPATIAL_CROPS = 1
+
+
 # ---------------------------------------------------------------------------- #
 # Testing options
 # ---------------------------------------------------------------------------- #
@@ -492,6 +496,7 @@ _C.EPICKITCHENS.BBOX_ACTIVE_OBJECT = False
 
 _C.EPICKITCHENS.BBOX_ANNOTATIONS_DIR = ""
 
+_C.EPICKITCHENS.FREEZE_BACKBONE = True
 _C.EPICKITCHENS.LOAD_SLOWFAST_PRETRAIN = False
 _C.EPICKITCHENS.SLOWFAST_PRETRAIN_CHECKPOINT_FILE_PATH = ""
 

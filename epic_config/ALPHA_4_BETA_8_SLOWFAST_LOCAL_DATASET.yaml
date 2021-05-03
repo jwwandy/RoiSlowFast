@@ -1,12 +1,13 @@
 TRAIN:
   ENABLE: True
   DATASET: epickitchens
-  BATCH_SIZE: 4
-  EVAL_PERIOD: 2
+  BATCH_SIZE: 8
+  EVAL_PERIOD: 3
   CHECKPOINT_PERIOD: 1
-  CHECKPOINT_TYPE: caffe2
+  CHECKPOINT_TYPE: pytorch
   AUTO_RESUME: True
   FINETUNE: True
+  CHECKPOINT_FILE_PATH: '/raid/xiaoyuz1/EPIC/SlowFast.pyth'
 DATA:
   NUM_FRAMES: 32
   SAMPLING_RATE: 2
@@ -44,7 +45,7 @@ SOLVER:
   LR_POLICY: steps_with_relative_lrs
   STEPS: [0, 20, 25]
   LRS: [1, 0.1, 0.01]
-  MAX_EPOCH: 30
+  MAX_EPOCH: 10
   MOMENTUM: 0.9
   WEIGHT_DECAY: 1e-4
   WARMUP_EPOCHS: 1
@@ -53,7 +54,7 @@ SOLVER:
 MODEL:
   NUM_CLASSES: [97, 300]
   ARCH: slowfast
-  MODEL_NAME: SlowFastBbox
+  MODEL_NAME: SlowFast
   LOSS_FUNC: cross_entropy
   DROPOUT_RATE: 0.5
 TEST:
@@ -61,6 +62,8 @@ TEST:
   DATASET: epickitchens
   BATCH_SIZE: 4
   NUM_SPATIAL_CROPS: 1
+  NUM_ENSEMBLE_VIEWS: 5
+  CHECKPOINT_FILE_PATH: '/raid/xiaoyuz1/EPIC/SlowFast.pyth'
 DATA_LOADER:
   NUM_WORKERS: 0
   PIN_MEMORY: True
@@ -72,6 +75,9 @@ EPICKITCHENS:
   TEST_LIST: 'annotations_slowfast_val2.pkl' 
   TRAIN_LIST : 'annotations_slowfast_train2.pkl'
   VAL_LIST : 'annotations_slowfast_val2.pkl'
+  USE_BBOX: False
 NUM_GPUS: 1
 NUM_SHARDS: 1
 RNG_SEED: 0
+LOG_PERIOD: 5
+OUTPUT_DIR: '/raid/xiaoyuz1/EPIC/slowfast_experiment/all_1_slowfast'

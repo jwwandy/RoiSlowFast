@@ -136,7 +136,7 @@ def horizontal_flip(prob, images, boxes=None):
 
         width = images.shape[3]
         if boxes is not None:
-            flipped_boxes[:, [0, 2]] = width - boxes[:, [2, 0]] - 1
+            flipped_boxes[:, [0, 2]] = width - boxes[:, [2, 0]] #- 1
 
     return images, flipped_boxes
 

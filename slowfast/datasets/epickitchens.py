@@ -41,6 +41,7 @@ class Epickitchens(torch.utils.data.Dataset):
             self._num_clips = (
                     cfg.TEST.NUM_ENSEMBLE_VIEWS * cfg.TEST.NUM_SPATIAL_CROPS
             )
+            self.emsemble_views = cfg.TEST.NUM_ENSEMBLE_VIEWS
 
         logger.info("Constructing EPIC-KITCHENS {}...".format(mode))
         self._construct_loader()
@@ -107,6 +108,7 @@ class Epickitchens(torch.utils.data.Dataset):
                 self._spatial_temporal_idx[index]
                 // self.cfg.TEST.NUM_SPATIAL_CROPS
             ) # 0,1,2,3,...,_num_clip-1
+
             # spatial_sample_index is in [0, 1, 2]. Corresponding to left,
             # center, or right if width is larger than height, and top, middle,
             # or bottom if height is larger than width.
@@ -117,6 +119,7 @@ class Epickitchens(torch.utils.data.Dataset):
                 )
             elif self.cfg.TEST.NUM_SPATIAL_CROPS == 1:
                 spatial_sample_index = 1 #center crop
+            
             min_scale, max_scale, crop_size = [self.cfg.DATA.TEST_CROP_SIZE] * 3
             # The testing is deterministic and no jitter should be performed.
             # min_scale, max_scale, and crop_size are expect to be the same.
@@ -192,10 +195,11 @@ class Epickitchens(torch.utils.data.Dataset):
         if bboxs is not None and mask is not None:
             has_no_area, mask = refine_mask_by_filter_out_zero_mask(bboxs, mask)
             bboxs[has_no_area] = np.array([0.0, 0.0, crop_size, crop_size])
-            bboxs[:,:,0] /= W
-            bboxs[:,:,1] /= H
-            bboxs[:,:,2] /= W
-            bboxs[:,:,3] /= H
+            
+            bboxs[:,:,0] /= crop_size
+            bboxs[:,:,1] /= crop_size
+            bboxs[:,:,2] /= crop_size
+            bboxs[:,:,3] /= crop_size
 
             fast_bboxs = bboxs.copy()
             fast_mask = mask.copy()
@@ -271,7 +275,14 @@ class Epickitchens(torch.utils.data.Dataset):
                 frames, min_scale, max_scale, boxes=bboxs_4
             )
             frames, bboxs_4 = transform.random_crop(frames, crop_size, boxes=bboxs_4)
+            if bboxs_4 is not None:
+                if np.any(bboxs_4 > crop_size):
+                    print("2", np.where(bboxs_4 > crop_size))
             frames, bboxs_4 = transform.horizontal_flip(0.5, frames, boxes=bboxs_4)
+            if bboxs_4 is not None:
+                if np.any(bboxs_4 < 0):
+                    print("3", np.where(bboxs_4 < 0))
+                    print(bboxs_4)
         else:
             # The testing is deterministic and no jitter should be performed.
             # min_scale, max_scale, and crop_size are expect to be the same.

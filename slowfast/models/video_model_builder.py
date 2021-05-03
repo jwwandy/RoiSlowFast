@@ -149,15 +149,22 @@ class SlowFastBbox(nn.Module):
                         1,
                     ],
                 ]
+        extra_fast_pool_size=[
+            cfg.DATA.NUM_FRAMES // pool_size[1][0],
+            cfg.DATA.CROP_SIZE // 32 // pool_size[1][1],
+            cfg.DATA.CROP_SIZE // 32 // pool_size[1][2],
+        ]
         self.bbox_head = head_helper.ResNetBboxClassifierHead(
             dim_in=[
                 cfg.RESNET.WIDTH_PER_GROUP * 32,
                 cfg.RESNET.WIDTH_PER_GROUP * 32 // cfg.SLOWFAST.BETA_INV,
+                # cfg.RESNET.WIDTH_PER_GROUP * 32 // cfg.SLOWFAST.BETA_INV,
             ],
             num_classes=cfg.MODEL.NUM_CLASSES, 
             pool_size=model_pool_size,
             resolution=[[cfg.DETECTION.ROI_XFORM_RESOLUTION] * 2] * 2, 
-            scale_factor=[cfg.DETECTION.SPATIAL_SCALE_FACTOR] * 2,
+            scale_factor=[cfg.DATA.CROP_SIZE // cfg.DETECTION.ROI_XFORM_RESOLUTION] * 2,
+            extra_fast_pool_size = None,
             act_func="softmax",
             aligned=cfg.DETECTION.ALIGNED,
         )
@@ -168,6 +175,12 @@ class SlowFastBbox(nn.Module):
     def load_weight_slowfast(self, slow_fast_model=None):
         if slow_fast_model is None:
             slow_fast_model = SlowFast(self.cfg)
+        
+        slow_fast_verb_proj = slow_fast_model.head.projection_verb.state_dict()
+        slow_fast_noun_proj = slow_fast_model.head.projection_noun.state_dict()
+        self.bbox_head.projection_verb.load_state_dict(slow_fast_verb_proj)
+        self.bbox_head.projection_noun.load_state_dict(slow_fast_noun_proj)
+
         slow_fast_model.head = nn.Identity()
         self.slow_fast = slow_fast_model 
         self.slow_fast = self.slow_fast.cuda()

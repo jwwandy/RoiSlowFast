@@ -34,8 +34,8 @@ def refine_mask_by_filter_out_zero_mask(bboxs, mask):
         return mask 
     
     # bboxs_4 = bboxs.reshape((-1,4))
-    no_width = bboxs[:,:,2] -  bboxs[:,:,0] < 1
-    no_height = bboxs[:,:,3] -  bboxs[:,:,1] < 1
+    no_width = bboxs[:,:,2] -  bboxs[:,:,0] < 20
+    no_height = bboxs[:,:,3] -  bboxs[:,:,1] < 20
     has_no_area = np.logical_or(no_width, no_height)
     has_area = np.logical_not(has_no_area)
     mask = np.logical_and(has_area, mask)
