@@ -38,7 +38,7 @@ def train_epoch(train_loader, model, optimizer, train_meter, cur_epoch, cfg, cnt
     if cfg.BN.FREEZE:
         model.freeze_fn('bn_statistics')
 
-    train_meter.iter_tic()
+    # train_meter.iter_tic()
     data_size = len(train_loader)
 
     logger.info("Train loader size: {}".format(data_size))
@@ -70,14 +70,16 @@ def train_epoch(train_loader, model, optimizer, train_meter, cur_epoch, cfg, cnt
         else:
             labels = labels.cuda()
         
-        if cur_itr == 0:
+        if cur_iter == 0:
             log_preds = []
             log_labels = []
-            log_loss = []
+            log_loss = []            
             if isinstance(inputs, (list,)):
                 for i in range(len(inputs)):
                     log_preds.append([])
                     log_labels.append([])
+                for i in range(len(inputs)+1):
+                    log_loss.append([]) 
 
         # for key, val in meta.items():
         #     if isinstance(val, (list,)):
@@ -112,47 +114,39 @@ def train_epoch(train_loader, model, optimizer, train_meter, cur_epoch, cfg, cnt
             loss = 0.5 * (loss_verb + loss_noun)
             # check Nan Loss.
             misc.check_nan_losses(loss)
+            log_loss[0].append(loss_verb.item())
+            log_loss[1].append(loss_noun.item())
+            log_loss[2].append(loss.item())
         else:
             # Explicitly declare reduction to mean.
             loss_fun = losses.get_loss_func(cfg.MODEL.LOSS_FUNC)(reduction="mean")
             # Compute the loss.
             loss = loss_fun(preds, labels)
             # check Nan Loss.
-            misc.check_nan_losses(loss)
+            misc.check_nan_losses(loss.item())
+            log_loss.append(loss)
 
         # Perform the backward pass.
         optimizer.zero_grad()
         loss.backward()
         # Update the parameters.
         optimizer.step()
-
-        # Add iteration loss into list
-        if cfg.NUM_GPUS > 1:
-            loss = du.all_reduce([loss])[0]
-        loss = loss.item()
-        log_loss.append(loss)
         
         # Add prediction and labels into list
-        if cfg.DETECTION.ENABLE:
-            # Detection only aggregates loss and not acc
-            train_meter.iter_toc()
-        else:
-            if cfg.NUM_GPUS > 1:
-                loss = du.all_reduce([loss])[0]
-            loss = loss.item()
-            log_loss.append(loss)
-
+        # Only log loss for DETECTION.ENABLE conditions
+        if not cfg.DETECTION.ENABLE:
             if isinstance(labels, (dict,)):
                 # Store prediciton and labels in an epoch
                 if cfg.NUM_GPUS > 1:
                     preds_v, preds_n, label_v, label_n = du.all_reduce(
                         [preds[0], preds[1], labels['verb'], labels['noun']]
                     )
-
+                else:
+                    preds_v, preds_n, label_v, label_n = preds[0], preds[1], labels['verb'], labels['noun']
                 log_preds[0].append(preds_v)
                 log_preds[1].append(preds_n)
                 log_labels[0].append(label_v)
-                log_labels[1].append(label_s)
+                log_labels[1].append(label_n)
             else:
                 if cfg.NUM_GPUS > 1:
                     preds, labels = du.all_reduce(
@@ -161,10 +155,11 @@ def train_epoch(train_loader, model, optimizer, train_meter, cur_epoch, cfg, cnt
 
                 log_preds.append(preds)
                 log_labels.append(labels)
-            train_meter.iter_toc()
+        
+        # train_meter.iter_toc()
 
         # Aggegrate LOG_ITR * BATCH_SIZE number of samples then compute metrics
-        if cur_iter > 0 and cur_itr % cfg.TRAIN.LOG_ITER == 0:
+        if cur_iter > 0 and cur_iter % cfg.LOG_PERIOD == 0:
             if cfg.DETECTION.ENABLE:
                 mean_loss = np.mean(log_loss)
                 train_meter.update_stats(None, None, None, mean_loss, lr)
@@ -173,27 +168,26 @@ def train_epoch(train_loader, model, optimizer, train_meter, cur_epoch, cfg, cnt
                 all_labels = []
                 # Aggregate into a list
                 if len(log_preds) > 1: # Has 'verb', 'noun' output, assume 2
-                    all_preds_verb = torch.stack(log_preds[0], dim=0).view(-1)
-                    all_preds.append(all_preds_verb)
-                    all_labels_verb = torch.stack(log_preds[0], dim=0).view(-1)
-                    all_labels.append(all_labels_verb)
+                    all_preds.append(torch.stack(log_preds[0], dim=0).view(-1, cfg.MODEL.NUM_CLASSES[0]))
+                    all_labels.append(torch.stack(log_labels[0], dim=0).view(-1))
 
-                    all_preds_noun = torch.stack(log_preds[1], dim=0).view(-1)
-                    all_preds.append(all_preds_noun)
-                    all_labels_noun = torch.stack(log_preds[1], dim=0).view(-1)
-                    all_labels.append(all_labels_noun)
+                    all_preds.append(torch.stack(log_preds[1], dim=0).view(-1, cfg.MODEL.NUM_CLASSES[1]))
+                    all_labels.append(torch.stack(log_labels[1], dim=0).view(-1))
                 else:
-                    all_preds.append(torch.stack(log_preds, dim=0).view(-1))
+                    all_preds.append(torch.stack(log_preds, dim=0).view(-1, cfg.MODEL.NUM_CLASSES[0]))
                     all_labels.append(torch.stack(log_labels, dim=0).view(-1))    
                 
                 if len(all_preds) > 1:
+                    loss_verb = np.mean(log_loss[0])
+                    loss_noun = np.mean(log_loss[1])
+                    loss = np.mean(log_loss[2])
                     # Compute the verb accuracies.
                     # verb_top1_acc, verb_top5_acc = metrics.topk_accuracies(preds[0], labels['verb'], (1, 5))
                     verb_top1_acc, verb_top5_acc = metrics.topk_accuracies(all_preds[0], all_labels[0], (1, 5))
 
                     predicted_answer_softmax = torch.nn.Softmax(dim=1)(preds[0])
                     predicted_answer_max = torch.max(predicted_answer_softmax.data, 1).indices
-                    print(cnt, predicted_answer_max, labels['verb'])
+                    # print(cnt, predicted_answer_max, labels['verb'])
 
                     # Gather all the predictions across all the devices.
                     if cfg.NUM_GPUS > 1:
@@ -242,7 +236,7 @@ def train_epoch(train_loader, model, optimizer, train_meter, cur_epoch, cfg, cnt
                         action_top5_acc.item(),
                     )
 
-                    train_meter.iter_toc()
+                    # train_meter.iter_toc()
                     # Update and log stats.
                     train_meter.update_stats(
                         (verb_top1_acc, noun_top1_acc, action_top1_acc),
@@ -252,6 +246,7 @@ def train_epoch(train_loader, model, optimizer, train_meter, cur_epoch, cfg, cnt
                     )
                 else:
                     # Compute the errors.
+                    loss = np.mean(log_loss)
                     num_topks_correct = metrics.topks_correct(all_preds, all_labels, (1, 5))
                     top1_err, top5_err = [
                         (1.0 - x / preds.size(0)) * 100.0 for x in num_topks_correct
@@ -270,14 +265,14 @@ def train_epoch(train_loader, model, optimizer, train_meter, cur_epoch, cfg, cnt
                         top5_err.item(),
                     )
 
-                    train_meter.iter_toc()
+                    # train_meter.iter_toc()
                     # Update and log stats.
                     train_meter.update_stats(
                         top1_err, top5_err, loss, lr, inputs[0].size(0) * cfg.NUM_GPUS
                     )
             train_meter.log_iter_stats(cur_epoch, cur_iter, cnt)
-            train_meter.iter_tic()
             cnt += 1
+        # train_meter.iter_tic()
     # Log epoch stats.
     print("\n")
     train_meter.log_epoch_stats(cur_epoch)

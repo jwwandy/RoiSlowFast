@@ -63,7 +63,7 @@ def eval_epoch(val_loader, model, val_meter, cur_epoch, cfg, cnt):
         #     else:
         #         meta[key] = val.cuda(non_blocking=True)
         
-        if cur_itr == 0:
+        if cur_iter == 0:
             # Metrics save for DETECTION.ENABLE only
             log_ori_boxes = []
             log_metadata = []
@@ -113,7 +113,7 @@ def eval_epoch(val_loader, model, val_meter, cur_epoch, cfg, cnt):
                 log_labels[0].append(labels['verb'])
                 log_labels[1].append(labels['noun'])
 
-        if cur_iter > 0 and cur_itr % cfg.TRAIN.LOG_ITER == 0:
+        if cur_iter > 0 and cur_iter % cfg.TRAIN.LOG_ITER == 0:
             if cfg.DETECTION.ENABLE:
                 all_preds = []
                 all_ori_boxes = []
@@ -126,12 +126,12 @@ def eval_epoch(val_loader, model, val_meter, cur_epoch, cfg, cnt):
                 val_meter.update_stats(all_preds, all_ori_boxes, all_metadata)
             else:
                 if len(log_preds) > 1: # Has 'verb', 'noun' output, assume 2
-                    all_preds_verb = torch.stack(log_preds[0], dim=0).view(-1)
+                    all_preds_verb = torch.stack(log_preds[0], dim=0).view(-1, cfg.MODELS.NUM_CLASSES[0])
                     all_preds.append(all_preds_verb)
                     all_labels_verb = torch.stack(log_preds[0], dim=0).view(-1)
                     all_labels.append(all_labels_verb)
 
-                    all_preds_noun = torch.stack(log_preds[1], dim=0).view(-1)
+                    all_preds_noun = torch.stack(log_preds[1], dim=0).view(-1, cfg.MODELS.NUM_CLASSES[1])
                     all_preds.append(all_preds_noun)
                     all_labels_noun = torch.stack(log_preds[1], dim=0).view(-1)
                     all_labels.append(all_labels_noun)
