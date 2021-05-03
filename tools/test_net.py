@@ -18,6 +18,14 @@ from slowfast.utils.meters import AVAMeter, TestMeter, EPICTestMeter
 logger = logging.get_logger(__name__)
 
 
+def to_cuda(data):
+    if isinstance(data, (list,)):
+        for i in range(len(data)):
+            data[i] = data[i].cuda(non_blocking=True)
+    else:
+        data = data.cuda(non_blocking=True)
+    return data
+
 def perform_test(test_loader, model, test_meter, cfg):
     """
     For classification:
@@ -41,7 +49,20 @@ def perform_test(test_loader, model, test_meter, cfg):
 
     test_meter.iter_tic()
 
-    for cur_iter, (inputs, bboxs, masks, labels, video_idx, meta) in enumerate(test_loader):
+    # for cur_iter, (inputs, bboxs, masks, labels, video_idx, meta) in enumerate(test_loader):
+    for cur_iter, output_dict in enumerate(test_loader):
+    
+        inputs = output_dict['inputs']
+        labels = output_dict['label'] 
+        video_idx = output_dict['index'] 
+        meta = output_dict['metadata'] 
+        if cfg.EPICKITCHENS.USE_BBOX:
+            bboxs = output_dict['bboxs']
+            masks = output_dict['masks']
+        else:
+            bboxs = None
+            masks = None
+
         # Transfer the data to the current GPU device.
         if isinstance(inputs, (list,)):
             for i in range(len(inputs)):
@@ -87,6 +108,8 @@ def perform_test(test_loader, model, test_meter, cfg):
         else:
             # Perform the forward pass.
             if cfg.EPICKITCHENS.USE_BBOX:
+                bboxs = to_cuda(bboxs)
+                masks = to_cuda(masks)
                 preds = model(inputs, bboxes=bboxs, masks=masks)
             else:
                 preds = model(inputs)
@@ -145,7 +168,7 @@ def perform_test(test_loader, model, test_meter, cfg):
     test_meter.reset()
     return preds, labels, metadata
 
-def test(cfg):
+def test(cfg, cnt=-1):
     """
     Perform multi-view testing on the pretrained video model.
     Args:
@@ -160,17 +183,20 @@ def test(cfg):
     logging.setup_logging()
 
     # Print config.
-    logger.info("Test with config:")
-    logger.info(cfg)
+    # if cnt < 0:
+    #     logger.info("Test with config:")
+    #     logger.info(cfg)
 
     # Build the video model and print model statistics.
     model = build_model(cfg)
+    if cfg.EPICKITCHENS.USE_BBOX:
+        model.load_weight_slowfast()
 
-    if du.is_master_proc():
-        misc.log_model_info(model, cfg, is_train=False)
-
+    # if du.is_master_proc():
+    #     misc.log_model_info(model, cfg, is_train=False)
     # Load a checkpoint to test if applicable.
     if cfg.TEST.CHECKPOINT_FILE_PATH != "":
+        logger.info("Load from given checkpoint file.")
         cu.load_checkpoint(
             cfg.TEST.CHECKPOINT_FILE_PATH,
             model,
@@ -180,6 +206,7 @@ def test(cfg):
             convert_from_caffe2=cfg.TEST.CHECKPOINT_TYPE == "caffe2",
         )
     elif cu.has_checkpoint(cfg.OUTPUT_DIR):
+        logger.info("Load from last checkpoint.")
         last_checkpoint = cu.get_last_checkpoint(cfg.OUTPUT_DIR)
         cu.load_checkpoint(last_checkpoint, model, cfg.NUM_GPUS > 1)
     elif cfg.TRAIN.CHECKPOINT_FILE_PATH != "":
@@ -233,7 +260,11 @@ def test(cfg):
     scores_path = os.path.join(cfg.OUTPUT_DIR, 'scores')
     if not os.path.exists(scores_path):
         os.makedirs(scores_path)
-    file_name = '{}.pkl'.format(cfg.EPICKITCHENS.TEST_SPLIT) #'P{:02d}_{}'.format(int(cfg.EPICKITCHENS.PARTICIPANT_ID), cfg.EPICKITCHENS.TEST_SPLIT)
+    
+    if cnt > 0:
+        file_name = '{}_{}.pkl'.format(cfg.EPICKITCHENS.TEST_SPLIT, cnt)
+    else:
+        file_name = '{}_{}.pkl'.format(cfg.EPICKITCHENS.TEST_SPLIT, 'test_only')
     file_path = os.path.join(scores_path, file_name)
 
     pickle.dump([], open(file_path, 'wb+'))
@@ -249,6 +280,6 @@ def test(cfg):
             scores_path = os.path.join(cfg.OUTPUT_DIR, 'scores')
             if not os.path.exists(scores_path):
                 os.makedirs(scores_path)
-            file_name = '{}.pkl'.format(cfg.EPICKITCHENS.TEST_SPLIT)
-            file_path = os.path.join(scores_path, file_name)
+            # file_name = '{}.pkl'.format(cfg.EPICKITCHENS.TEST_SPLIT)
+            # file_path = os.path.join(scores_path, file_name)
             pickle.dump(results, open(file_path, 'wb'))

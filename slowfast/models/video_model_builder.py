@@ -11,6 +11,9 @@ import slowfast.utils.weight_init_helper as init_helper
 from . import head_helper, resnet_helper, stem_helper
 from .build import MODEL_REGISTRY
 
+import slowfast.utils.checkpoint as cu
+
+
 # Number of blocks for different stages given the model depth.
 _MODEL_STAGE_DEPTH = {50: (3, 4, 6, 3), 101: (3, 4, 23, 3)}
 
@@ -128,6 +131,7 @@ class FuseFastToSlow(nn.Module):
 class SlowFastBbox(nn.Module):
     def __init__(self, cfg):
         super(SlowFastBbox, self).__init__()
+        self.cfg = cfg
         self.enable_detection = cfg.DETECTION.ENABLE
         self.num_pathways = 2
         self.slow_fast = SlowFast(cfg)
@@ -162,9 +166,12 @@ class SlowFastBbox(nn.Module):
         )
     
     def load_weight_slowfast(self, slow_fast_model=None):
-        if slow_fast_model != None:
-            slow_fast_model.head = nn.Identity()
-            self.slow_fast = slow_fast_model
+        if slow_fast_model is None:
+            slow_fast_model = SlowFast(self.cfg)
+        slow_fast_model.head = nn.Identity()
+        self.slow_fast = slow_fast_model 
+        self.slow_fast = self.slow_fast.cuda()
+        # print(self.slow_fast)
 
     def forward(self, x, bboxes=None, masks=None):
         feat = self.slow_fast(x)

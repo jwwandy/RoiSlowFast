@@ -143,7 +143,6 @@ class Epickitchens(torch.utils.data.Dataset):
                 decoded, then return the index of the video. If not, return the
                 index of the video replacement that can be decoded.
         """
-        
         temporal_sample_index, spatial_sample_index, min_scale, max_scale, crop_size = self.get_frames_sample_info(index)
         frames,frame_idx = pack_frames_to_video_clip(self.cfg, self._video_records[index], temporal_sample_index)
         # frames: (T,256,456,C)
@@ -189,6 +188,7 @@ class Epickitchens(torch.utils.data.Dataset):
         frames = utils.pack_pathway_output(self.cfg, frames)
         metadata = self._video_records[index].metadata
         
+        output_dict = dict()
         if bboxs is not None and mask is not None:
             has_no_area, mask = refine_mask_by_filter_out_zero_mask(bboxs, mask)
             bboxs[has_no_area] = np.array([0.0, 0.0, crop_size, crop_size])
@@ -214,10 +214,20 @@ class Epickitchens(torch.utils.data.Dataset):
                 all_bboxs = [torch.FloatTensor(slow_bboxs), torch.FloatTensor(fast_bboxs)]
                 all_masks = [torch.FloatTensor(slow_mask), torch.FloatTensor(fast_mask)]
 
-            return frames, all_bboxs, all_masks, label, index, metadata
+            output_dict['inputs'] = frames
+            output_dict['bboxs'] = all_bboxs
+            output_dict['masks'] = all_masks
+            output_dict['label'] = label
+            output_dict['index'] = index
+            output_dict['metadata'] = metadata
+            # return frames, all_bboxs, all_masks, label, index, metadata
         else:
-            return frames, label, index, metadata
-
+            output_dict['inputs'] = frames
+            output_dict['label'] = label
+            output_dict['index'] = index
+            output_dict['metadata'] = metadata
+            # return frames, label, index, metadata
+        return output_dict
 
     def __len__(self):
         return len(self._video_records)

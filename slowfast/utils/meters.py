@@ -21,6 +21,8 @@ from slowfast.utils.ava_eval_helper import (
     read_labelmap,
 )
 
+import wandb
+
 logger = logging.get_logger(__name__)
 
 
@@ -647,6 +649,9 @@ class EPICTrainMeter(object):
         self.num_noun_top5_cor = 0
         self.num_samples = 0
 
+        wandb.login()
+        wandb.init(project='bbox', entity='slowfast')
+
     def reset(self):
         """
         Reset the Meter.
@@ -717,7 +722,7 @@ class EPICTrainMeter(object):
         self.loss_total += loss[2] * mb_size
         self.num_samples += mb_size
 
-    def log_iter_stats(self, cur_epoch, cur_iter):
+    def log_iter_stats(self, cur_epoch, cur_iter, cnt):
         """
         log the stats of the current iteration.
         Args:
@@ -732,7 +737,7 @@ class EPICTrainMeter(object):
         eta = str(datetime.timedelta(seconds=int(eta_sec)))
         mem_usage = misc.gpu_mem_usage()
         stats = {
-            "_type": "train_iter",
+            "_type": "TRAIN_ITER___TRAIN_ITER___TRAIN_ITER___TRAIN_ITER",
             "epoch": "{}/{}".format(cur_epoch + 1, self._cfg.SOLVER.MAX_EPOCH),
             "iter": "{}/{}".format(cur_iter + 1, self.epoch_iters),
             "time_diff": self.iter_timer.seconds(),
@@ -750,6 +755,20 @@ class EPICTrainMeter(object):
             "mem": int(np.ceil(mem_usage)),
         }
         logging.log_json_stats(stats)
+        wandb_dict = {
+            "train/verb_top1_acc": self.mb_verb_top1_acc.get_win_median(),
+            "train/verb_top5_acc": self.mb_verb_top5_acc.get_win_median(),
+            "train/noun_top1_acc": self.mb_noun_top1_acc.get_win_median(),
+            "train/noun_top5_acc": self.mb_noun_top5_acc.get_win_median(),
+            "train/top1_acc": self.mb_top1_acc.get_win_median(),
+            "train/top5_acc": self.mb_top5_acc.get_win_median(),
+            "train/verb_loss": self.loss_verb.get_win_median(),
+            "train/noun_loss": self.loss_noun.get_win_median(),
+            "train/loss": self.loss.get_win_median(),
+        }
+        wandb.log(wandb_dict, step=cnt)
+
+        
 
     def log_epoch_stats(self, cur_epoch):
         """
@@ -772,7 +791,7 @@ class EPICTrainMeter(object):
         avg_loss_noun = self.loss_noun_total / self.num_samples
         avg_loss = self.loss_total / self.num_samples
         stats = {
-            "_type": "train_epoch",
+            "_type": "~~~~~~TRAIN_EPOCH___TRAIN_EPOCH___TRAIN_EPOCH___TRAIN_EPOCH~~~~~~",
             "epoch": "{}/{}".format(cur_epoch + 1, self._cfg.SOLVER.MAX_EPOCH),
             "time_diff": self.iter_timer.seconds(),
             "eta": eta,
@@ -881,7 +900,7 @@ class EPICValMeter(object):
         self.num_top5_cor += top5_acc[2] * mb_size
         self.num_samples += mb_size
 
-    def log_iter_stats(self, cur_epoch, cur_iter):
+    def log_iter_stats(self, cur_epoch, cur_iter, cnt):
         """
         log the stats of the current iteration.
         Args:
@@ -894,7 +913,7 @@ class EPICValMeter(object):
         eta = str(datetime.timedelta(seconds=int(eta_sec)))
         mem_usage = misc.gpu_mem_usage()
         stats = {
-            "_type": "val_iter",
+            "_type": "VAL_ITER___VAL_ITER___VAL_ITER___VAL_ITER",
             "epoch": "{}/{}".format(cur_epoch + 1, self._cfg.SOLVER.MAX_EPOCH),
             "iter": "{}/{}".format(cur_iter + 1, self.max_iter),
             "time_diff": self.iter_timer.seconds(),
@@ -908,8 +927,9 @@ class EPICValMeter(object):
             "mem": int(np.ceil(mem_usage)),
         }
         logging.log_json_stats(stats)
+        
 
-    def log_epoch_stats(self, cur_epoch):
+    def log_epoch_stats(self, cur_epoch, cnt):
         """
         Log the stats of the current epoch.
         Args:
@@ -930,7 +950,7 @@ class EPICValMeter(object):
         self.max_top5_acc = max(self.max_top5_acc, top5_acc)
         mem_usage = misc.gpu_mem_usage()
         stats = {
-            "_type": "val_epoch",
+            "_type": "~~~~~~VAL_EPOCH___VAL_EPOCH___VAL_EPOCH___VAL_EPOCH~~~~~~",
             "epoch": "{}/{}".format(cur_epoch + 1, self._cfg.SOLVER.MAX_EPOCH),
             "time_diff": self.iter_timer.seconds(),
             "verb_top1_acc": verb_top1_acc,
@@ -948,6 +968,22 @@ class EPICValMeter(object):
             "mem": int(np.ceil(mem_usage)),
         }
         logging.log_json_stats(stats)
+
+        wandb_dict = {
+            "val/verb_top1_acc": verb_top1_acc,
+            "val/verb_top5_acc": verb_top5_acc,
+            "val/noun_top1_acc": noun_top1_acc,
+            "val/noun_top5_acc": noun_top5_acc,
+            "val/top1_acc": top1_acc,
+            "val/top5_acc": top5_acc,
+            "val/max_verb_top1_acc": self.max_verb_top1_acc,
+            "val/max_verb_top5_acc": self.max_verb_top5_acc,
+            "val/max_noun_top1_acc": self.max_noun_top1_acc,
+            "val/max_noun_top5_acc": self.max_noun_top5_acc,
+            "val/max_top1_acc": self.max_top1_acc,
+            "val/max_top5_acc": self.max_top5_acc,
+        }
+        wandb.log(wandb_dict, step=cnt)
 
         return is_best_epoch
 
@@ -1028,7 +1064,7 @@ class EPICTestMeter(object):
         eta_sec = self.iter_timer.seconds() * (self.overall_iters - cur_iter)
         eta = str(datetime.timedelta(seconds=int(eta_sec)))
         stats = {
-            "split": "test_iter",
+            "split": "TEST_ITER___TEST_ITER___TEST_ITER___TEST_ITER",
             "cur_iter": "{}".format(cur_iter + 1),
             "eta": eta,
             "time_diff": self.iter_timer.seconds(),

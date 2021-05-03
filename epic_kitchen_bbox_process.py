@@ -22,6 +22,9 @@ args = parser.parse_args()
 
 '''
 python epic_kitchen_bbox_process.py --annotations_dir '/raid/xiaoyuz1/EPIC/epic-annotations' --visual_data_dir '/raid/xiaoyuz1/EPIC/EPIC-KITCHENS' --bbox_annotations_dir '/raid/xiaoyuz1/EPIC/epic-bbox-annotations/all' --anno_file /raid/xiaoyuz1/EPIC/epic-annotations/annotations_slowfast_val2.pkl --anno_format 'annotations_{}.pkl'
+
+python epic_kitchen_bbox_process.py --annotations_dir '/raid/xiaoyuz1/EPIC/epic-annotations' --visual_data_dir '/raid/xiaoyuz1/EPIC/EPIC-KITCHENS' --bbox_annotations_dir '/raid/xiaoyuz1/EPIC/epic-bbox-annotations/all' --anno_file /raid/xiaoyuz1/EPIC/epic-annotations/annotations_slowfast_train2.pkl --anno_format 'annotations_{}.pkl'
+
 '''
 
 # os.path.join(args.annotations_dir, 'EPIC_100_train.pkl')

@@ -122,6 +122,18 @@ def is_eval_epoch(cfg, cur_epoch):
         cur_epoch + 1
     ) % cfg.TRAIN.EVAL_PERIOD == 0 or cur_epoch + 1 == cfg.SOLVER.MAX_EPOCH
 
+# def is_test_epoch(cfg, cur_epoch):
+#     """
+#     Determine if the model should be evaluated at the current epoch.
+#     Args:
+#         cfg (CfgNode): configs. Details can be found in
+#             slowfast/config/defaults.py
+#         cur_epoch (int): current epoch.
+#     """
+#     return (
+#         cur_epoch + 1
+#     ) % cfg.TRAIN.EVAL_PERIOD == 0 or cur_epoch + 1 == cfg.SOLVER.MAX_EPOCH
+
 
 def plot_input(tensor, bboxes=(), texts=(), path="./tmp_vis.png"):
     """

@@ -65,10 +65,10 @@ class ResNetBboxClassifierHead(nn.Module):
         else:
             self.projection = nn.Linear(sum(dim_in), num_classes, bias=True)
 
-    def forward(self, inputs, bboxes, mask):
+    def forward(self, inputs, bboxes, masks):
         '''
         bboxes: B*T*N, 5
-        mask: B*T*N,
+        masks: B*T*N,
         '''
         assert (
             len(inputs) == self.num_pathways
@@ -76,6 +76,7 @@ class ResNetBboxClassifierHead(nn.Module):
         pool_out = []
         for pathway in range(self.num_pathways):
             input = inputs[pathway]
+            
             assert len(input.shape) == 5
             # B, C, T, H, W
             B, C, T = input.shape[0:3]
@@ -84,6 +85,8 @@ class ResNetBboxClassifierHead(nn.Module):
                 # B, C, T, H, W -> B, T, C, H, W
                 input = input.permute((0, 2, 1, 3, 4))
                 # B*T, C, H, W
+                # print(input.shape, input.shape[2:])
+                input = input.contiguous()
                 input = input.view(-1, *input.shape[2:])
                 roi_align = getattr(self, "s{}_roi".format(pathway))
                 # B*T*N, C, output_size[0], output_size[1]
@@ -91,14 +94,14 @@ class ResNetBboxClassifierHead(nn.Module):
                 output_sizes = out.shape[2:4]
 
                 # B*T*N, 1, 1, 1
-                mask = mask.view(-1, 1, 1, 1)
-                out = out * mask
+                masks = masks.view(-1, 1, 1, 1)
+                out = out * masks
                 # B, T, N, C, output_size[0], output_size[1]
-                out = out.view(B, T, len(mask)//(B*T), C, output_sizes[0], output_sizes[1])
-                mask_denom = mask.view(B, T, -1).sum(2)
-                mask_denom = mask_denom.view(B, T, 1, 1, 1)
+                out = out.view(B, T, len(masks)//(B*T), C, output_sizes[0], output_sizes[1])
+                masks_denom = masks.view(B, T, -1).sum(2)
+                masks_denom = masks_denom.view(B, T, 1, 1, 1)
                 # B, T, C, output_size[0], output_size[1]
-                out = out.sum(2) / mask_denom
+                out = out.sum(2) / (masks_denom + 1e-8)
                 # Perform Temporal Pooling
                 # B, T, C, output_size[0], output_size[1] ->  B, C, T, output_size[0], output_size[1]
                 out = out.permute((0, 2, 1, 3, 4))

@@ -10,6 +10,10 @@ from torch.utils.data._utils.collate import default_collate
 from torch.utils.data.distributed import DistributedSampler
 from torch.utils.data.sampler import RandomSampler
 
+import slowfast.utils.logging as logging
+logger = logging.get_logger(__name__)
+
+
 from .build import build_dataset
 
 def pad_epic_bbox(bbox, mask, target_len):
@@ -17,6 +21,7 @@ def pad_epic_bbox(bbox, mask, target_len):
     trans_bboxs = bbox.clone().permute((1,0,2)) 
     pad_len = target_len - N
     base_case = torch.tensor([0., 0., 1., 1.])
+    # import pdb; pdb.set_trace()
     bbox_pad = base_case.repeat(pad_len * T).view((pad_len, T ,4))
     padded_bboxs = torch.cat([trans_bboxs, bbox_pad], dim=0).permute((1,0,2)) #(target_len,T,4) --> (T,target_len,4)
 
@@ -45,23 +50,42 @@ def epic_bbox_collate(batch):
     Returns:
         (tuple): collated detection data batch.
     """
-    inputs, all_bboxs, all_masks, labels, video_idx, extra_data = zip(*batch)
+    collated_dict = dict()
+    # import pdb; pdb.set_trace()
+    for sample_dict in batch:
+        for k,v in sample_dict.items():
+            L = collated_dict.get(k, [])
+            L.append(v)
+            collated_dict[k] = L
+    
+    # inputs, all_bboxs, all_masks, labels, video_idx, extra_data = zip(*batch)
+    inputs = collated_dict['inputs']
+    all_bboxs = collated_dict['bboxs']
+    all_masks = collated_dict['masks']
+    labels = collated_dict['label']
+    video_idx = collated_dict['index']
+    extra_data = collated_dict['metadata']
+
     inputs, video_idx = default_collate(inputs), default_collate(video_idx)
-    # labels = torch.tensor(np.concatenate(labels, axis=0)).float()
     labels = default_collate(labels)
     extra_data = default_collate(extra_data)
 
-    
+    output_dict = dict()
+    output_dict['inputs'] = inputs
+    output_dict['label'] = labels
+    output_dict['index'] = video_idx
+    output_dict['metadata'] = extra_data
+
     all_bboxs_padded = []
     all_masks_padded = []
     B = len(all_masks)
-    max_N = np.max([len(fast_t) for fast_t,_ in all_bboxs])
-    
+    max_N = np.max([fast_t.shape[1] for fast_t,_ in all_bboxs])
+
     # Pad each bbox tensor 
     idx_acc = 0
     for batch_idx in range(B):
-        fast_bbox, _ = all_bboxs[batch_idx]
-        fast_mask, _ = all_masks[batch_idx]
+        _,fast_bbox = all_bboxs[batch_idx]
+        _,fast_mask = all_masks[batch_idx]
         
         T,_,_ = fast_bbox.shape
         padded_bboxs_with_indices, padded_mask = pad_epic_bbox(fast_bbox, fast_mask, max_N)
@@ -71,10 +95,16 @@ def epic_bbox_collate(batch):
         all_masks_padded.append(padded_mask)
         idx_acc += T
     
+    # for t in all_bboxs_padded:
+    #     print(t.shape)
     fast_bboxs_collated = torch.cat(all_bboxs_padded, dim=0).view(-1,5)
     fast_mask_collated = torch.cat(all_masks_padded, dim=0).flatten()#.view(-1,1)
 
-    return inputs, fast_bboxs_collated, fast_mask_collated, labels, video_idx, extra_data
+    output_dict['bboxs'] = fast_bboxs_collated
+    output_dict['masks'] = fast_mask_collated
+
+    #return inputs, fast_bboxs_collated, fast_mask_collated, labels, video_idx, extra_data
+    return output_dict
 
 
 
@@ -151,6 +181,7 @@ def construct_loader(cfg, split):
         collate_func = detection_collate
     elif cfg.EPICKITCHENS.USE_BBOX:
         collate_func = epic_bbox_collate
+        logger.info("Using epic_bbox_collate")
     else:
         collate_func = None
     loader = torch.utils.data.DataLoader(

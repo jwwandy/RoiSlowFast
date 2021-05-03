@@ -180,6 +180,7 @@ def load_checkpoint(
         path_to_checkpoint
     ), "Checkpoint '{}' not found".format(path_to_checkpoint)
     # Account for the DDP wrapper in the multi-gpu setting.
+    
     ms = model.module if data_parallel else model
     if convert_from_caffe2:
         with open(path_to_checkpoint, "rb") as f:
