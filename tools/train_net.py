@@ -92,6 +92,7 @@ def train(cfg):
                     convert_from_caffe2=False,
                 )
         # cfg.TRAIN.CHECKPOINT_TYPE == "caffe2"
+        logger.info("Load from slowfast.")
         model.load_weight_slowfast(slow_fast_model)
         # model.load_weight_slowfast()
 
@@ -100,7 +101,7 @@ def train(cfg):
 
     if cfg.BN.FREEZE:
         model.freeze_fn('bn_parameters')
-    if cfg.EPICKITCHENS.USE_BBOX:
+    if cfg.EPICKITCHENS.USE_BBOX and cfg.EPICKITCHENS.FREEZE_BACKBONE:
         model.freeze_fn('slowfast_bbox')
 
     # Construct the optimizer.
@@ -131,7 +132,7 @@ def train(cfg):
             cfg.TRAIN.CHECKPOINT_FILE_PATH,
             model,
             cfg.NUM_GPUS > 1,
-            optimizer,
+            None,
             inflation=cfg.TRAIN.CHECKPOINT_INFLATE,
             convert_from_caffe2=cfg.TRAIN.CHECKPOINT_TYPE == "caffe2",
         )

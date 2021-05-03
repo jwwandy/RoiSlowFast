@@ -51,7 +51,7 @@ def epic_bbox_collate(batch):
         (tuple): collated detection data batch.
     """
     collated_dict = dict()
-    # import pdb; pdb.set_trace()
+    # 
     for sample_dict in batch:
         for k,v in sample_dict.items():
             L = collated_dict.get(k, [])
@@ -97,6 +97,7 @@ def epic_bbox_collate(batch):
     
     # for t in all_bboxs_padded:
     #     print(t.shape)
+    # import pdb; pdb.set_trace()
     fast_bboxs_collated = torch.cat(all_bboxs_padded, dim=0).view(-1,5)
     fast_mask_collated = torch.cat(all_masks_padded, dim=0).flatten()#.view(-1,1)
 

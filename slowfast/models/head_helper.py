@@ -15,24 +15,30 @@ class ResNetBboxClassifierHead(nn.Module):
         pool_size,
         resolution,
         scale_factor,
+        extra_fast_pool_size=None,
         dropout_rate=0.0,
         act_func="softmax",
         aligned=True,
     ):
         super(ResNetBboxClassifierHead, self).__init__()
-        assert (
-            len({len(pool_size), len(dim_in)}) == 1
-        ), "pathway dimensions are not consistent."
+        # assert (
+        #     len({len(pool_size), len(dim_in)}) == 1
+        # ), "pathway dimensions are not consistent."
         self.dim_in = dim_in
         self.num_classes = num_classes
         self.num_pathways = len(pool_size)
         self.resolution = resolution
+        self.extra_fast_pool_size = extra_fast_pool_size
         for pathway in range(self.num_pathways):
             # No temporal pooling
             if self.num_pathways and pathway == 0:
                 avg_pool = nn.AvgPool3d(pool_size[pathway])
-                self.add_module("avg_pool", avg_pool)
+                self.add_module("avg_pool_{}".format(pathway), avg_pool)
             else:
+                if extra_fast_pool_size is not None:
+                    avg_pool = nn.AvgPool3d(extra_fast_pool_size)
+                    self.add_module("avg_pool_{}".format(pathway), avg_pool)
+
                 roi_align = ROIAlign(
                     resolution[pathway],
                     spatial_scale=1.0 / scale_factor[pathway],
@@ -40,8 +46,10 @@ class ResNetBboxClassifierHead(nn.Module):
                     aligned=aligned,
                 )
                 self.add_module("s{}_roi".format(pathway), roi_align)
+                
                 spatial_pool = nn.MaxPool2d(resolution[pathway], stride=1)
                 self.add_module("s{}_pool".format(pathway), spatial_pool)
+                
                 temporal_pool = nn.AvgPool3d(pool_size[pathway], stride=1)
                 self.add_module("t{}_pool".format(pathway), temporal_pool)
 
@@ -83,14 +91,15 @@ class ResNetBboxClassifierHead(nn.Module):
             
             if self.num_pathways == 2 and pathway == 1:
                 # B, C, T, H, W -> B, T, C, H, W
-                input = input.permute((0, 2, 1, 3, 4))
+                input_bbox = input.clone()
+                input_bbox = input_bbox.permute((0, 2, 1, 3, 4))
                 # B*T, C, H, W
                 # print(input.shape, input.shape[2:])
-                input = input.contiguous()
-                input = input.view(-1, *input.shape[2:])
+                input_bbox = input_bbox.contiguous()
+                input_bbox = input_bbox.view(-1, *input_bbox.shape[2:])
                 roi_align = getattr(self, "s{}_roi".format(pathway))
                 # B*T*N, C, output_size[0], output_size[1]
-                out = roi_align(input, bboxes)
+                out = roi_align(input_bbox, bboxes)
                 output_sizes = out.shape[2:4]
 
                 # B*T*N, 1, 1, 1
@@ -115,19 +124,24 @@ class ResNetBboxClassifierHead(nn.Module):
                 # B, C, 1, 1, 1
                 out_s = s_pool(out_t).unsqueeze(dim=2)
                 # Spatial Pool 出來後 will be B x C x 1 x 1 x 1
+                pool_out.append(out_s)
 
-            else:
-                # B, C, T, H, W
-                avg_pool = getattr(self, "avg_pool")
-                # B, C, 1, 1, 1
-                out_s = avg_pool(input)
-                
-            pool_out.append(out_s)
+                if self.extra_fast_pool_size is None:
+                    continue
+
+            # else:
+            # B, C, T, H, W
+            avg_pool = getattr(self, "avg_pool_{}".format(pathway))
+            # B, C, 1, 1, 1
+            input_normal = input.clone()
+            out_s_normal = avg_pool(input_normal)
+            pool_out.append(out_s_normal)
 
         # B x Cs x 1 x 1 x 1
         x = torch.cat(pool_out, 1)
         # (N, C, T, H, W) -> (N, T, H, W, C).
         x = x.permute((0, 2, 3, 4, 1))
+        # print("before dropout: ", x.shape)
         # Perform dropout.
         if hasattr(self, "dropout"):
             x = self.dropout(x)
