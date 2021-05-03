@@ -21,7 +21,7 @@ from slowfast.models import build_model
 from slowfast.utils.meters import AVAMeter, TrainMeter, ValMeter, EPICTrainMeter, EPICValMeter
 from train_epoch import train_epoch
 from val_epoch import eval_epoch
-from test_net import test
+from test_net import test_from_train
 
 from slowfast.models.video_model_builder import SlowFast
 
@@ -79,20 +79,21 @@ def train(cfg):
 
     # Build the video model and print model statistics.
     model = build_model(cfg)
-    if cfg.EPICKITCHENS.USE_BBOX:
-        # slow_fast_model = SlowFast(cfg)
-        # if cfg.EPICKITCHENS.USE_BBOX and cfg.EPICKITCHENS.LOAD_SLOWFAST_PRETRAIN:
-        #     if cfg.EPICKITCHENS.SLOWFAST_PRETRAIN_CHECKPOINT_FILE_PATH != "":
-        #         _ = cu.load_checkpoint(
-        #             cfg.EPICKITCHENS.SLOWFAST_PRETRAIN_CHECKPOINT_FILE_PATH,
-        #             slow_fast_model,
-        #             cfg.NUM_GPUS > 1,
-        #             optimizer=None,
-        #             inflation=cfg.TRAIN.CHECKPOINT_INFLATE,
-        #             convert_from_caffe2=cfg.TRAIN.CHECKPOINT_TYPE == "caffe2",
-        #         )
-        # model.load_weight_slowfast(slow_fast_model)
-        model.load_weight_slowfast()
+    if cfg.EPICKITCHENS.USE_BBOX and not cu.has_checkpoint(cfg.OUTPUT_DIR):
+        slow_fast_model = SlowFast(cfg)
+        if cfg.EPICKITCHENS.USE_BBOX and cfg.EPICKITCHENS.LOAD_SLOWFAST_PRETRAIN:
+            if cfg.EPICKITCHENS.SLOWFAST_PRETRAIN_CHECKPOINT_FILE_PATH != "":
+                _ = cu.load_checkpoint(
+                    cfg.EPICKITCHENS.SLOWFAST_PRETRAIN_CHECKPOINT_FILE_PATH,
+                    slow_fast_model,
+                    cfg.NUM_GPUS > 1,
+                    optimizer=None,
+                    inflation=cfg.TRAIN.CHECKPOINT_INFLATE,
+                    convert_from_caffe2=False,
+                )
+        # cfg.TRAIN.CHECKPOINT_TYPE == "caffe2"
+        model.load_weight_slowfast(slow_fast_model)
+        # model.load_weight_slowfast()
 
     # if du.is_master_proc():
     #     misc.log_model_info(model, cfg, is_train=True)
@@ -183,5 +184,5 @@ def train(cfg):
             is_best_epoch = eval_epoch(val_loader, model, val_meter, cur_epoch, cfg, cnt)
             if is_best_epoch:
                 cu.save_checkpoint(cfg.OUTPUT_DIR, model, optimizer, cur_epoch, cfg, is_best_epoch=is_best_epoch)
-            test(cfg, cnt=cnt)
+            test_from_train(model, cfg, cnt=cnt)
 

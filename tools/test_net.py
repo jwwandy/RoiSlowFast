@@ -168,6 +168,64 @@ def perform_test(test_loader, model, test_meter, cfg):
     test_meter.reset()
     return preds, labels, metadata
 
+def test_from_train(model, cfg, cnt=-1):
+    test_loader = loader.construct_loader(cfg, "test")
+    logger.info("Testing model for {} iterations".format(len(test_loader)))
+    if cfg.DETECTION.ENABLE:
+        assert cfg.NUM_GPUS == cfg.TEST.BATCH_SIZE
+        test_meter = AVAMeter(len(test_loader), cfg, mode="test")
+    else:
+        assert (
+            len(test_loader.dataset)
+            % (cfg.TEST.NUM_ENSEMBLE_VIEWS * cfg.TEST.NUM_SPATIAL_CROPS)
+            == 0
+        )
+        # Create meters for multi-view testing.
+        if cfg.TEST.DATASET == 'epickitchens':
+            test_meter = EPICTestMeter(
+                len(test_loader.dataset)
+                // (cfg.TEST.NUM_ENSEMBLE_VIEWS * cfg.TEST.NUM_SPATIAL_CROPS),
+                cfg.TEST.NUM_ENSEMBLE_VIEWS * cfg.TEST.NUM_SPATIAL_CROPS,
+                cfg.MODEL.NUM_CLASSES,
+                len(test_loader),
+            )
+        else:
+            test_meter = TestMeter(
+                len(test_loader.dataset)
+                // (cfg.TEST.NUM_ENSEMBLE_VIEWS * cfg.TEST.NUM_SPATIAL_CROPS),
+                cfg.TEST.NUM_ENSEMBLE_VIEWS * cfg.TEST.NUM_SPATIAL_CROPS,
+                cfg.MODEL.NUM_CLASSES,
+                len(test_loader),
+            )
+
+    # # Perform multi-view test on the entire dataset.
+    scores_path = os.path.join(cfg.OUTPUT_DIR, 'scores')
+    if not os.path.exists(scores_path):
+        os.makedirs(scores_path)
+    
+    if cnt > 0:
+        file_name = '{}_{}.pkl'.format(cfg.EPICKITCHENS.TEST_SPLIT, cnt)
+    else:
+        file_name = '{}_{}.pkl'.format(cfg.EPICKITCHENS.TEST_SPLIT, 'test_only')
+    file_path = os.path.join(scores_path, file_name)
+
+    pickle.dump([], open(file_path, 'wb+'))
+    preds, labels, metadata = perform_test(test_loader, model, test_meter, cfg)
+
+    if du.is_master_proc():
+        if cfg.TEST.DATASET == 'epickitchens':
+            results = {'verb_output': preds[0],
+                       'noun_output': preds[1],
+                       'verb_gt': labels[0],
+                       'noun_gt': labels[1],
+                       'narration_id': metadata}
+            scores_path = os.path.join(cfg.OUTPUT_DIR, 'scores')
+            if not os.path.exists(scores_path):
+                os.makedirs(scores_path)
+            # file_name = '{}.pkl'.format(cfg.EPICKITCHENS.TEST_SPLIT)
+            # file_path = os.path.join(scores_path, file_name)
+            pickle.dump(results, open(file_path, 'wb'))
+
 def test(cfg, cnt=-1):
     """
     Perform multi-view testing on the pretrained video model.

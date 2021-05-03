@@ -53,7 +53,7 @@ SOLVER:
 MODEL:
   NUM_CLASSES: [97, 300]
   ARCH: slowfast
-  MODEL_NAME: SlowFast
+  MODEL_NAME: SlowFastBbox
   LOSS_FUNC: cross_entropy
   DROPOUT_RATE: 0.5
 TEST:

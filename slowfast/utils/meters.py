@@ -754,7 +754,7 @@ class EPICTrainMeter(object):
             "lr": self.lr,
             "mem": int(np.ceil(mem_usage)),
         }
-        logging.log_json_stats(stats)
+        # logging.log_json_stats(stats)
         wandb_dict = {
             "train/verb_top1_acc": self.mb_verb_top1_acc.get_win_median(),
             "train/verb_top5_acc": self.mb_verb_top5_acc.get_win_median(),
@@ -807,7 +807,7 @@ class EPICTrainMeter(object):
             "lr": self.lr,
             "mem": int(np.ceil(mem_usage)),
         }
-        logging.log_json_stats(stats)
+        # logging.log_json_stats(stats)
 
 
 class EPICValMeter(object):
@@ -926,7 +926,7 @@ class EPICValMeter(object):
             "top5_acc": self.mb_top5_acc.get_win_median(),
             "mem": int(np.ceil(mem_usage)),
         }
-        logging.log_json_stats(stats)
+        # logging.log_json_stats(stats)
         
 
     def log_epoch_stats(self, cur_epoch, cnt):
@@ -967,7 +967,7 @@ class EPICValMeter(object):
             "max_top5_acc": self.max_top5_acc,
             "mem": int(np.ceil(mem_usage)),
         }
-        logging.log_json_stats(stats)
+        # logging.log_json_stats(stats)
 
         wandb_dict = {
             "val/verb_top1_acc": verb_top1_acc,
