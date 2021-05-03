@@ -12,6 +12,7 @@ import slowfast.utils.logging as logging
 import slowfast.utils.metrics as metrics
 import slowfast.utils.misc as misc
 from slowfast.datasets import loader
+import wandb
 
 logger = logging.get_logger(__name__)
 
@@ -63,7 +64,7 @@ def eval_epoch(val_loader, model, val_meter, cur_epoch, cfg, cnt):
         #     else:
         #         meta[key] = val.cuda(non_blocking=True)
         
-        if cur_iter == 0:
+        if cur_iter % cfg.LOG_PERIOD == 1:
             # Metrics save for DETECTION.ENABLE only
             log_ori_boxes = []
             log_metadata = []
@@ -113,7 +114,7 @@ def eval_epoch(val_loader, model, val_meter, cur_epoch, cfg, cnt):
                 log_labels[0].append(labels['verb'])
                 log_labels[1].append(labels['noun'])
 
-        if cur_iter > 0 and cur_iter % cfg.TRAIN.LOG_ITER == 0:
+        if cur_iter % cfg.TRAIN.LOG_ITER == 0:
             if cfg.DETECTION.ENABLE:
                 all_preds = []
                 all_ori_boxes = []
@@ -125,6 +126,8 @@ def eval_epoch(val_loader, model, val_meter, cur_epoch, cfg, cnt):
 
                 val_meter.update_stats(all_preds, all_ori_boxes, all_metadata)
             else:
+                all_preds = []
+                all_labels = []
                 if len(log_preds) > 1: # Has 'verb', 'noun' output, assume 2
                     all_preds_verb = torch.stack(log_preds[0], dim=0).view(-1, cfg.MODELS.NUM_CLASSES[0])
                     all_preds.append(all_preds_verb)
@@ -171,13 +174,24 @@ def eval_epoch(val_loader, model, val_meter, cur_epoch, cfg, cnt):
                     # Copy the errors from GPU to CPU (sync point).
                     action_top1_acc, action_top5_acc = action_top1_acc.item(), action_top5_acc.item()
 
-                    val_meter.iter_toc()
-                    # Update and log stats.
-                    val_meter.update_stats(
-                        (verb_top1_acc, noun_top1_acc, action_top1_acc),
-                        (verb_top5_acc, noun_top5_acc, action_top5_acc),
-                        inputs[0].size(0) * cfg.NUM_GPUS
-                    )
+                    logger.info("\n=>Epoch-{}-Iter-{}-Cnt-{} val/verb_top1_acc: {} \n\tval/verb_top5_acc: {}\n\tval/top1_acc: {}\n\tval/top5_acc: {}".format(cur_epoch, cur_iter, cnt, verb_top1_acc, verb_top5_acc, action_top1_acc, action_top5_acc))
+                    wandb_dict = {
+                        "val/verb_top1_acc": verb_top1_acc,
+                        "val/verb_top5_acc": verb_top5_acc,
+                        "val/noun_top1_acc": noun_top1_acc,
+                        "val/noun_top5_acc": noun_top5_acc,
+                        "val/top1_acc": action_top1_acc,
+                        "val/top5_acc": action_top5_acc,
+                    }
+                    wandb.log(wandb_dict, step=cnt)
+                    
+                    # val_meter.iter_toc()
+                    # # Update and log stats.
+                    # val_meter.update_stats(
+                    #     (verb_top1_acc, noun_top1_acc, action_top1_acc),
+                    #     (verb_top5_acc, noun_top5_acc, action_top5_acc),
+                    #     inputs[0].size(0) * cfg.NUM_GPUS
+                    # )
                 else:
                     # Compute the errors.
                     num_topks_correct = metrics.topks_correct(all_preds, all_labels, (1, 5))
@@ -192,15 +206,15 @@ def eval_epoch(val_loader, model, val_meter, cur_epoch, cfg, cnt):
                     # Copy the errors from GPU to CPU (sync point).
                     top1_err, top5_err = top1_err.item(), top5_err.item()
 
-                    val_meter.iter_toc()
-                    # Update and log stats.
-                    val_meter.update_stats(
-                        top1_err, top5_err, inputs[0].size(0) * cfg.NUM_GPUS
-                    )
-            val_meter.log_iter_stats(cur_epoch, cur_iter, cnt)
-            val_meter.iter_tic()
-    # Log epoch stats.
-    is_best_epoch = val_meter.log_epoch_stats(cur_epoch, cnt)
-    val_meter.reset()
-    return is_best_epoch
+                    # val_meter.iter_toc()
+                    # # Update and log stats.
+                    # val_meter.update_stats(
+                    #     top1_err, top5_err, inputs[0].size(0) * cfg.NUM_GPUS
+                    # )
+            # val_meter.log_iter_stats(cur_epoch, cur_iter, cnt)
+            # val_meter.iter_tic()
+    # # Log epoch stats.
+    # is_best_epoch = val_meter.log_epoch_stats(cur_epoch, cnt)
+    # val_meter.reset()
+    return True
 

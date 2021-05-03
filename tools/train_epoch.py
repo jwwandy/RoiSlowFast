@@ -15,6 +15,7 @@ import slowfast.utils.misc as misc
 from slowfast.datasets import loader
 from slowfast.models import build_model
 # from slowfast.utils.meters import AVAMeter, TrainMeter, ValMeter, EPICTrainMeter, EPICValMeter
+import wandb
 
 logger = logging.get_logger(__name__)
 
@@ -70,7 +71,8 @@ def train_epoch(train_loader, model, optimizer, train_meter, cur_epoch, cfg, cnt
         else:
             labels = labels.cuda()
         
-        if cur_iter == 0:
+        # Reset the accumulator for calculating accuracy at iter 1,LOG_PERIOD+1...
+        if cur_iter % cfg.LOG_PERIOD == 1:
             log_preds = []
             log_labels = []
             log_loss = []            
@@ -104,6 +106,13 @@ def train_epoch(train_loader, model, optimizer, train_meter, cur_epoch, cfg, cnt
                 preds = model(inputs, bboxes=bboxs, masks=masks)
             else:
                 preds = model(inputs)
+            
+            if len(preds) > 1:
+                log_preds[0].append(preds[0])
+                log_preds[1].append(preds[1])
+            else:
+                log_preds.append(preds)
+                
 
         if isinstance(labels, (dict,)):
             # Explicitly declare reduction to mean.
@@ -114,9 +123,13 @@ def train_epoch(train_loader, model, optimizer, train_meter, cur_epoch, cfg, cnt
             loss = 0.5 * (loss_verb + loss_noun)
             # check Nan Loss.
             misc.check_nan_losses(loss)
+            
             log_loss[0].append(loss_verb.item())
             log_loss[1].append(loss_noun.item())
             log_loss[2].append(loss.item())
+
+            log_labels[0].append(labels['verb'])
+            log_labels[1].append(labels['noun'])
         else:
             # Explicitly declare reduction to mean.
             loss_fun = losses.get_loss_func(cfg.MODEL.LOSS_FUNC)(reduction="mean")
@@ -124,7 +137,9 @@ def train_epoch(train_loader, model, optimizer, train_meter, cur_epoch, cfg, cnt
             loss = loss_fun(preds, labels)
             # check Nan Loss.
             misc.check_nan_losses(loss.item())
+
             log_loss.append(loss)
+            log_labels.append(labels)
 
         # Perform the backward pass.
         optimizer.zero_grad()
@@ -156,10 +171,9 @@ def train_epoch(train_loader, model, optimizer, train_meter, cur_epoch, cfg, cnt
                 log_preds.append(preds)
                 log_labels.append(labels)
         
-        # train_meter.iter_toc()
 
         # Aggegrate LOG_ITR * BATCH_SIZE number of samples then compute metrics
-        if cur_iter > 0 and cur_iter % cfg.LOG_PERIOD == 0:
+        if cur_iter % cfg.LOG_PERIOD == 0:
             if cfg.DETECTION.ENABLE:
                 mean_loss = np.mean(log_loss)
                 train_meter.update_stats(None, None, None, mean_loss, lr)
@@ -173,6 +187,8 @@ def train_epoch(train_loader, model, optimizer, train_meter, cur_epoch, cfg, cnt
 
                     all_preds.append(torch.stack(log_preds[1], dim=0).view(-1, cfg.MODEL.NUM_CLASSES[1]))
                     all_labels.append(torch.stack(log_labels[1], dim=0).view(-1))
+
+                    import pdb; pdb.set_trace()
                 else:
                     all_preds.append(torch.stack(log_preds, dim=0).view(-1, cfg.MODEL.NUM_CLASSES[0]))
                     all_labels.append(torch.stack(log_labels, dim=0).view(-1))    
@@ -201,7 +217,7 @@ def train_epoch(train_loader, model, optimizer, train_meter, cur_epoch, cfg, cnt
                         verb_top1_acc.item(),
                         verb_top5_acc.item(),
                     )
-                    log_loss.append(loss.item())
+                    # log_loss.append(loss.item())
 
                     # Compute the noun accuracies.
                     noun_top1_acc, noun_top5_acc = metrics.topk_accuracies(all_preds[1], all_labels[1], (1, 5))
@@ -236,14 +252,28 @@ def train_epoch(train_loader, model, optimizer, train_meter, cur_epoch, cfg, cnt
                         action_top5_acc.item(),
                     )
 
+                    wandb_dict = {
+                        "train/verb_top1_acc": verb_top1_acc,
+                        "train/verb_top5_acc": verb_top5_acc,
+                        "train/noun_top1_acc": noun_top1_acc,
+                        "train/noun_top5_acc": noun_top5_acc,
+                        "train/top1_acc": action_top1_acc,
+                        "train/top5_acc": action_top5_acc,
+                        "train/verb_loss": loss_verb,
+                        "train/noun_loss": loss_noun,
+                        "train/loss": loss,
+                    }
+                    logger.info("\n======>Epoch-{}-Iter-{}-Cnt-{} train/verb_top1_acc: {} \n\ttrain/verb_top5_acc: {}\n\ttrain/top1_acc: {}\n\ttrain/top5_acc: {}\n\ttrain/verb_loss: {}\n\ttrain/noun_loss: {}\n\ttrain/loss: {}".format(cur_epoch, cur_iter,cnt, verb_top1_acc, verb_top5_acc, action_top1_acc, action_top5_acc, loss_verb, loss_noun, loss))
+                    wandb.log(wandb_dict, step=cnt)
+
                     # train_meter.iter_toc()
-                    # Update and log stats.
-                    train_meter.update_stats(
-                        (verb_top1_acc, noun_top1_acc, action_top1_acc),
-                        (verb_top5_acc, noun_top5_acc, action_top5_acc),
-                        (loss_verb, loss_noun, loss),
-                        lr, inputs[0].size(0) * cfg.NUM_GPUS
-                    )
+                    # # Update and log stats.
+                    # train_meter.update_stats(
+                    #     (verb_top1_acc, noun_top1_acc, action_top1_acc),
+                    #     (verb_top5_acc, noun_top5_acc, action_top5_acc),
+                    #     (loss_verb, loss_noun, loss),
+                    #     lr, inputs[0].size(0) * cfg.NUM_GPUS
+                    # )
                 else:
                     # Compute the errors.
                     loss = np.mean(log_loss)
@@ -266,16 +296,15 @@ def train_epoch(train_loader, model, optimizer, train_meter, cur_epoch, cfg, cnt
                     )
 
                     # train_meter.iter_toc()
-                    # Update and log stats.
-                    train_meter.update_stats(
-                        top1_err, top5_err, loss, lr, inputs[0].size(0) * cfg.NUM_GPUS
-                    )
-            train_meter.log_iter_stats(cur_epoch, cur_iter, cnt)
-            cnt += 1
+                    # # Update and log stats.
+                    # train_meter.update_stats(
+                    #     top1_err, top5_err, loss, lr, inputs[0].size(0) * cfg.NUM_GPUS
+                    # )
+        # train_meter.log_iter_stats(cur_epoch, cur_iter, cnt)
+        cnt += 1
         # train_meter.iter_tic()
     # Log epoch stats.
-    print("\n")
-    train_meter.log_epoch_stats(cur_epoch)
-    train_meter.reset()
+    # train_meter.log_epoch_stats(cur_epoch)
+    # train_meter.reset()
     return cnt
 
