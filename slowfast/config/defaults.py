@@ -75,6 +75,7 @@ _C.TRAIN.EVAL_PERIOD = 1
 
 # Save model checkpoint every checkpoint period epochs.
 _C.TRAIN.CHECKPOINT_PERIOD = 1
+_C.TRAIN.ITER_CHECKPOINT_PERIOD = 200
 
 # Resume training from the latest checkpoint in the output directory.
 _C.TRAIN.AUTO_RESUME = True
@@ -350,6 +351,7 @@ _C.RNG_SEED = 1
 
 # Log period in iters.
 _C.LOG_PERIOD = 10
+_C.ACC_LOG_PERIOD_RATIO = 4
 
 # Distributed backend.
 _C.DIST_BACKEND = "nccl"

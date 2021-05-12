@@ -72,7 +72,10 @@ def train_epoch(train_loader, model, optimizer, train_meter, cur_epoch, cfg, cnt
             labels = labels.cuda()
         
         # Reset the accumulator for calculating accuracy at iter 1,LOG_PERIOD+1...
-        if cur_iter % cfg.LOG_PERIOD == 1:
+        # if cur_iter == 0 or cur_iter % cfg.LOG_PERIOD == 1:
+        #     if cur_iter == 1:
+        #         continue
+        if cur_iter % (cfg.LOG_PERIOD * cfg.ACC_LOG_PERIOD_RATIO) == 0:
             log_preds = []
             log_labels = []
             log_loss = []            
@@ -107,11 +110,11 @@ def train_epoch(train_loader, model, optimizer, train_meter, cur_epoch, cfg, cnt
             else:
                 preds = model(inputs)
             
-            if len(preds) > 1:
-                log_preds[0].append(preds[0])
-                log_preds[1].append(preds[1])
-            else:
-                log_preds.append(preds)
+            # if len(preds) > 1:
+            #     log_preds[0].append(preds[0])
+            #     log_preds[1].append(preds[1])
+            # else:
+            #     log_preds.append(preds)
                 
 
         if isinstance(labels, (dict,)):
@@ -128,8 +131,8 @@ def train_epoch(train_loader, model, optimizer, train_meter, cur_epoch, cfg, cnt
             log_loss[1].append(loss_noun.item())
             log_loss[2].append(loss.item())
 
-            log_labels[0].append(labels['verb'])
-            log_labels[1].append(labels['noun'])
+            # log_labels[0].append(labels['verb'])
+            # log_labels[1].append(labels['noun'])
         else:
             # Explicitly declare reduction to mean.
             loss_fun = losses.get_loss_func(cfg.MODEL.LOSS_FUNC)(reduction="mean")
@@ -139,7 +142,7 @@ def train_epoch(train_loader, model, optimizer, train_meter, cur_epoch, cfg, cnt
             misc.check_nan_losses(loss.item())
 
             log_loss.append(loss)
-            log_labels.append(labels)
+            # log_labels.append(labels)
 
         # Perform the backward pass.
         optimizer.zero_grad()
@@ -173,7 +176,7 @@ def train_epoch(train_loader, model, optimizer, train_meter, cur_epoch, cfg, cnt
         
 
         # Aggegrate LOG_ITR * BATCH_SIZE number of samples then compute metrics
-        if cur_iter % cfg.LOG_PERIOD == 0:
+        if (cur_iter+1) % cfg.LOG_PERIOD == 0:
             if cfg.DETECTION.ENABLE:
                 mean_loss = np.mean(log_loss)
                 train_meter.update_stats(None, None, None, mean_loss, lr)
@@ -188,7 +191,6 @@ def train_epoch(train_loader, model, optimizer, train_meter, cur_epoch, cfg, cnt
                     all_preds.append(torch.stack(log_preds[1], dim=0).view(-1, cfg.MODEL.NUM_CLASSES[1]))
                     all_labels.append(torch.stack(log_labels[1], dim=0).view(-1))
 
-                    import pdb; pdb.set_trace()
                 else:
                     all_preds.append(torch.stack(log_preds, dim=0).view(-1, cfg.MODEL.NUM_CLASSES[0]))
                     all_labels.append(torch.stack(log_labels, dim=0).view(-1))    
@@ -302,6 +304,8 @@ def train_epoch(train_loader, model, optimizer, train_meter, cur_epoch, cfg, cnt
                     # )
         # train_meter.log_iter_stats(cur_epoch, cur_iter, cnt)
         cnt += 1
+        if (cur_iter+1) % cfg.LOG_PERIOD == 0:
+            cu.save_checkpoint(cfg.OUTPUT_DIR, model, optimizer, cur_epoch, cfg)
         # train_meter.iter_tic()
     # Log epoch stats.
     # train_meter.log_epoch_stats(cur_epoch)

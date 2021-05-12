@@ -51,6 +51,8 @@ def perform_test(test_loader, model, test_meter, cfg):
 
     # for cur_iter, (inputs, bboxs, masks, labels, video_idx, meta) in enumerate(test_loader):
     for cur_iter, output_dict in enumerate(test_loader):
+        if cur_iter % 100 == 0:
+            print(cur_iter)
     
         inputs = output_dict['inputs']
         labels = output_dict['label'] 
@@ -203,10 +205,11 @@ def test_from_train(model, cfg, cnt=-1):
     if not os.path.exists(scores_path):
         os.makedirs(scores_path)
     
+    filename_root = cfg.EPICKITCHENS.TEST_LIST.split('.')[0]
     if cnt > 0:
-        file_name = '{}_{}.pkl'.format(cfg.EPICKITCHENS.TEST_SPLIT, cnt)
+        file_name = '{}_{}_{}.pkl'.format(filename_root, cnt, cfg.MODEL.MODEL_NAME)
     else:
-        file_name = '{}_{}.pkl'.format(cfg.EPICKITCHENS.TEST_SPLIT, 'test_only')
+        file_name = '{}_{}_{}.pkl'.format(filename_root, 'test_only', cfg.MODEL.MODEL_NAME)
     file_path = os.path.join(scores_path, file_name)
 
     pickle.dump([], open(file_path, 'wb+'))
@@ -239,6 +242,19 @@ def test(cfg, cnt=-1):
 
     # Setup logging format.
     logging.setup_logging()
+
+    # # Perform multi-view test on the entire dataset.
+    scores_path = os.path.join(cfg.OUTPUT_DIR, 'scores')
+    if not os.path.exists(scores_path):
+        os.makedirs(scores_path)
+    
+    filename_root = cfg.EPICKITCHENS.TEST_LIST.split('.')[0]
+    if cnt > 0:
+        file_name = '{}_{}_{}.pkl'.format(filename_root, cnt, cfg.MODEL.MODEL_NAME)
+    else:
+        file_name = '{}_{}_{}.pkl'.format(filename_root, 'test_only', cfg.MODEL.MODEL_NAME)
+    file_path = os.path.join(scores_path, file_name)
+    logger.info(file_path)
 
     # Print config.
     # if cnt < 0:
@@ -314,16 +330,7 @@ def test(cfg, cnt=-1):
                 len(test_loader),
             )
 
-    # # Perform multi-view test on the entire dataset.
-    scores_path = os.path.join(cfg.OUTPUT_DIR, 'scores')
-    if not os.path.exists(scores_path):
-        os.makedirs(scores_path)
     
-    if cnt > 0:
-        file_name = '{}_{}.pkl'.format(cfg.EPICKITCHENS.TEST_SPLIT, cnt)
-    else:
-        file_name = '{}_{}.pkl'.format(cfg.EPICKITCHENS.TEST_SPLIT, 'test_only')
-    file_path = os.path.join(scores_path, file_name)
 
     pickle.dump([], open(file_path, 'wb+'))
     preds, labels, metadata = perform_test(test_loader, model, test_meter, cfg)
