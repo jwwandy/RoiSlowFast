@@ -74,11 +74,12 @@ def train(cfg):
     logging.setup_logging()
 
     # Print config.
-    logger.info("Train with config:")
-    logger.info(pprint.pformat(cfg))
+    # logger.info("Train with config:")
+    # logger.info(pprint.pformat(cfg))
 
     # Build the video model and print model statistics.
     model = build_model(cfg)
+    
     if cfg.EPICKITCHENS.USE_BBOX and not cu.has_checkpoint(cfg.OUTPUT_DIR):
         slow_fast_model = SlowFast(cfg)
         if cfg.EPICKITCHENS.USE_BBOX and cfg.EPICKITCHENS.LOAD_SLOWFAST_PRETRAIN:
@@ -94,7 +95,6 @@ def train(cfg):
         # cfg.TRAIN.CHECKPOINT_TYPE == "caffe2"
         logger.info("Load from slowfast.")
         model.load_weight_slowfast(slow_fast_model)
-        
     # if du.is_master_proc():
     #     misc.log_model_info(model, cfg, is_train=True)
 

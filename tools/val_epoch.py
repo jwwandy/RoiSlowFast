@@ -81,8 +81,13 @@ def eval_epoch(val_loader, model, val_meter, cur_epoch, cfg, cnt):
             val_meter.update_stats(preds.cpu(), ori_boxes.cpu(), metadata.cpu())
         else:
             if cfg.EPICKITCHENS.USE_BBOX:
-                bboxs = bboxs.cuda()
-                masks = masks.cuda()
+                if isinstance(bboxs, (list,)):
+                    for i in range(len(bboxs)):
+                        bboxs[i] = bboxs[i].cuda(non_blocking=True)
+                        masks[i] = masks[i].cuda(non_blocking=True)
+                else:
+                    bboxs = bboxs.cuda(non_blocking=True)
+                    masks = masks.cuda(non_blocking=True)
                 preds = model(inputs, bboxes=bboxs, masks=masks)
             else:
                 preds = model(inputs)

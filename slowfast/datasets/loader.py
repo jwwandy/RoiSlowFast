@@ -76,33 +76,37 @@ def epic_bbox_collate(batch):
     output_dict['index'] = video_idx
     output_dict['metadata'] = extra_data
 
-    all_bboxs_padded = []
-    all_masks_padded = []
+    bboxs_output = []
+    masks_output = []
+    num_type_bbox = len(all_bboxs[0])
     B = len(all_masks)
-    max_N = np.max([fast_t.shape[1] for fast_t,_ in all_bboxs])
-
-    # Pad each bbox tensor 
-    idx_acc = 0
-    for batch_idx in range(B):
-        _,fast_bbox = all_bboxs[batch_idx]
-        _,fast_mask = all_masks[batch_idx]
+    for type_i in range(num_type_bbox):
+        all_bboxs_padded = []
+        all_masks_padded = []
         
-        T,_,_ = fast_bbox.shape
-        padded_bboxs_with_indices, padded_mask = pad_epic_bbox(fast_bbox, fast_mask, max_N)
-        padded_bboxs_with_indices[:,:,0] += idx_acc
+        max_N = np.max([t[type_i].shape[1] for t in all_bboxs])
 
-        all_bboxs_padded.append(padded_bboxs_with_indices)
-        all_masks_padded.append(padded_mask)
-        idx_acc += T
-    
-    # for t in all_bboxs_padded:
-    #     print(t.shape)
+        # Pad each bbox tensor 
+        idx_acc = 0
+        for batch_idx in range(B):
+            bbox = all_bboxs[batch_idx][type_i]
+            mask = all_masks[batch_idx][type_i]
+
+            T,_,_ = bbox.shape 
+            padded_bboxs_with_indices, padded_mask = pad_epic_bbox(bbox, mask, max_N)
+            padded_bboxs_with_indices[:,:,0] += idx_acc
+            all_bboxs_padded.append(padded_bboxs_with_indices)
+            all_masks_padded.append(padded_mask)
+            idx_acc += T
+        
+        bboxs_collated = torch.cat(all_bboxs_padded, dim=0).view(-1,5)
+        mask_collated = torch.cat(all_masks_padded, dim=0).flatten()#.view(-1,1)
+        bboxs_output.append(bboxs_collated)
+        masks_output.append(mask_collated)
+
     # import pdb; pdb.set_trace()
-    fast_bboxs_collated = torch.cat(all_bboxs_padded, dim=0).view(-1,5)
-    fast_mask_collated = torch.cat(all_masks_padded, dim=0).flatten()#.view(-1,1)
-
-    output_dict['bboxs'] = fast_bboxs_collated
-    output_dict['masks'] = fast_mask_collated
+    output_dict['bboxs'] = bboxs_output
+    output_dict['masks'] = masks_output
 
     #return inputs, fast_bboxs_collated, fast_mask_collated, labels, video_idx, extra_data
     return output_dict

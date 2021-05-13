@@ -85,8 +85,14 @@ def train_epoch(train_loader, model, optimizer, train_meter, cur_epoch, cfg, cnt
         else:
             # Perform the forward pass.
             if cfg.EPICKITCHENS.USE_BBOX:
-                bboxs = bboxs.cuda()
-                masks = masks.cuda()
+                if isinstance(bboxs, (list,)):
+                    for i in range(len(bboxs)):
+                        bboxs[i] = bboxs[i].cuda(non_blocking=True)
+                        masks[i] = masks[i].cuda(non_blocking=True)
+                else:
+                    bboxs = bboxs.cuda(non_blocking=True)
+                    masks = masks.cuda(non_blocking=True)
+                
                 preds = model(inputs, bboxes=bboxs, masks=masks)
             else:
                 preds = model(inputs)

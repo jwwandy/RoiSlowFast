@@ -232,7 +232,7 @@ class Epickitchens(torch.utils.data.Dataset):
             fast_bboxs = bboxs.copy()
             fast_mask = mask.copy()
             
-            if self.cfg.MODEL.ARCH in self.cfg.MODEL.SINGLE_PATHWAY_ARCH:
+            if self.cfg.EPICKITCHENS.ROI_BRANCH == 1:
                 all_bboxs = [torch.FloatTensor(fast_bboxs)]
                 all_masks = [torch.FloatTensor(fast_mask)]
             else:
@@ -243,8 +243,14 @@ class Epickitchens(torch.utils.data.Dataset):
                 slow_mask = mask.copy()
                 slow_mask = slow_mask[select_slow_idx]
 
-                all_bboxs = [torch.FloatTensor(slow_bboxs), torch.FloatTensor(fast_bboxs)]
-                all_masks = [torch.FloatTensor(slow_mask), torch.FloatTensor(fast_mask)]
+                if self.cfg.EPICKITCHENS.ROI_BRANCH == 0:
+                    all_bboxs = [torch.FloatTensor(slow_bboxs)]
+                    all_masks = [torch.FloatTensor(slow_mask)]
+                else:
+                    all_bboxs = [torch.FloatTensor(slow_bboxs), torch.FloatTensor(fast_bboxs)]
+                    all_masks = [torch.FloatTensor(slow_mask), torch.FloatTensor(fast_mask)]
+            
+            # if self.cfg.MODEL.ARCH in self.cfg.MODEL.SINGLE_PATHWAY_ARCH:
 
             output_dict['inputs'] = frames
             output_dict['bboxs'] = all_bboxs

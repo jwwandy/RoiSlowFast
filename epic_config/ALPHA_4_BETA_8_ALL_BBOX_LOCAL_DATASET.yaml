@@ -1,7 +1,7 @@
 TRAIN:
   ENABLE: True
   DATASET: epickitchens
-  BATCH_SIZE: 8
+  BATCH_SIZE: 32
   EVAL_PERIOD: 3
   CHECKPOINT_PERIOD: 1
   CHECKPOINT_TYPE: pytorch
@@ -70,15 +70,15 @@ EPICKITCHENS:
   TRAIN_PLUS_VAL: False
   VISUAL_DATA_DIR: '/raid/xiaoyuz1/EPIC/EPIC-KITCHENS' 
   ANNOTATIONS_DIR: '/raid/xiaoyuz1/EPIC/epic-annotations' 
-  BBOX_ANNOTATIONS_DIR: '/raid/xiaoyuz1/EPIC/epic-bbox-annotations/all' 
-  TEST_LIST: 'annotations_slowfast_val2.pkl' 
-  TRAIN_LIST : 'annotations_slowfast_train2.pkl'
-  VAL_LIST : 'annotations_slowfast_val2.pkl'
+  BBOX_ANNOTATIONS_DIR: '/raid/xiaoyuz1/EPIC/epic-bbox-annotations/all_filled_in' 
+  TEST_LIST: 'annotations_val_P02_12.pkl' 
+  TRAIN_LIST : 'annotations_train_P02_01.pkl'
+  VAL_LIST : 'annotations_val_P02_12.pkl'
   USE_BBOX: True
   FREEZE_BACKBONE: False
   LOAD_SLOWFAST_PRETRAIN: True
   SLOWFAST_PRETRAIN_CHECKPOINT_FILE_PATH: '/raid/xiaoyuz1/EPIC/SlowFast.pyth'
-NUM_GPUS: 1
+NUM_GPUS: 4
 NUM_SHARDS: 1
 RNG_SEED: 0
 LOG_PERIOD: 30

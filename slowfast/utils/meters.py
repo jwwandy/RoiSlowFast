@@ -648,8 +648,7 @@ class EPICTrainMeter(object):
         self.num_noun_top1_cor = 0
         self.num_noun_top5_cor = 0
         self.num_samples = 0
-        
-        self.enable_wandb = cfg.ENABLE_WANDB
+        print("cfg.LOG_PERIOD: ", cfg.LOG_PERIOD)
         if cfg.ENABLE_WANDB:
             wandb.login()
             wandb.init(project='bbox', entity='slowfast')
@@ -738,26 +737,55 @@ class EPICTrainMeter(object):
         )
         eta = str(datetime.timedelta(seconds=int(eta_sec)))
         mem_usage = misc.gpu_mem_usage()
+        # stats = {
+        #     "_type": "TRAIN_ITER___TRAIN_ITER___TRAIN_ITER___TRAIN_ITER",
+        #     "epoch": "{}/{}".format(cur_epoch + 1, self._cfg.SOLVER.MAX_EPOCH),
+        #     "iter": "{}/{}".format(cur_iter + 1, self.epoch_iters),
+        #     "time_diff": self.iter_timer.seconds(),
+        #     "eta": eta,
+        #     "verb_top1_acc": self.mb_verb_top1_acc.get_win_median(),
+        #     "verb_top5_acc": self.mb_verb_top5_acc.get_win_median(),
+        #     "noun_top1_acc": self.mb_noun_top1_acc.get_win_median(),
+        #     "noun_top5_acc": self.mb_noun_top5_acc.get_win_median(),
+        #     "top1_acc": self.mb_top1_acc.get_win_median(),
+        #     "top5_acc": self.mb_top5_acc.get_win_median(),
+        #     "verb_loss": self.loss_verb.get_win_median(),
+        #     "noun_loss": self.loss_noun.get_win_median(),
+        #     "loss": self.loss.get_win_median(),
+        #     "lr": self.lr,
+        #     "mem": int(np.ceil(mem_usage)),
+        # }
+        # logging.log_json_stats(stats)
+
+        verb_top1_acc = self.num_verb_top1_cor / self.num_samples
+        verb_top5_acc = self.num_verb_top5_cor / self.num_samples
+        noun_top1_acc = self.num_noun_top1_cor / self.num_samples
+        noun_top5_acc = self.num_noun_top5_cor / self.num_samples
+        top1_acc = self.num_top1_cor / self.num_samples
+        top5_acc = self.num_top5_cor / self.num_samples
+        avg_loss_verb = self.loss_verb_total / self.num_samples
+        avg_loss_noun = self.loss_noun_total / self.num_samples
+        avg_loss = self.loss_total / self.num_samples
         stats = {
             "_type": "TRAIN_ITER___TRAIN_ITER___TRAIN_ITER___TRAIN_ITER",
             "epoch": "{}/{}".format(cur_epoch + 1, self._cfg.SOLVER.MAX_EPOCH),
             "iter": "{}/{}".format(cur_iter + 1, self.epoch_iters),
             "time_diff": self.iter_timer.seconds(),
             "eta": eta,
-            "verb_top1_acc": self.mb_verb_top1_acc.get_win_median(),
-            "verb_top5_acc": self.mb_verb_top5_acc.get_win_median(),
-            "noun_top1_acc": self.mb_noun_top1_acc.get_win_median(),
-            "noun_top5_acc": self.mb_noun_top5_acc.get_win_median(),
-            "top1_acc": self.mb_top1_acc.get_win_median(),
-            "top5_acc": self.mb_top5_acc.get_win_median(),
-            "verb_loss": self.loss_verb.get_win_median(),
-            "noun_loss": self.loss_noun.get_win_median(),
-            "loss": self.loss.get_win_median(),
+            "verb_top1_acc": verb_top1_acc,
+            "verb_top5_acc": verb_top5_acc,
+            "noun_top1_acc": noun_top1_acc,
+            "noun_top5_acc": noun_top5_acc,
+            "top1_acc": top1_acc,
+            "top5_acc": top5_acc,
+            "verb_loss": avg_loss_verb,
+            "noun_loss": avg_loss_noun,
+            "loss": avg_loss,
             "lr": self.lr,
             "mem": int(np.ceil(mem_usage)),
         }
-        logging.log_json_stats(stats)
-        if self.enable_wandb:
+
+        if self._cfg.ENABLE_WANDB:
             # wandb_dict = {
             #     "train/verb_top1_acc": self.mb_verb_top1_acc.get_win_median(),
             #     "train/verb_top5_acc": self.mb_verb_top5_acc.get_win_median(),

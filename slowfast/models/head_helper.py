@@ -5,38 +5,38 @@
 
 import torch
 import torch.nn as nn
-from detectron2.layers import ROIAlign
+# from detectron2.layers import ROIAlign
+from torchvision.ops import RoIAlign
 
 class RoiAlignComponent(nn.Module):
     def __init__(self, pool_size, resolution, scale_factor, pathway, aligned=True):
         super().__init__()
-        roi_align = ROIAlign(
+        self.roi_align = RoIAlign(
             resolution,
             spatial_scale=1.0 / scale_factor,
             sampling_ratio=0,
             aligned=aligned,
         )
-        self.add_module("s{}_roi".format(pathway), roi_align)
+        # self.add_module("s{}_roi".format(pathway), roi_align)
         
-        temporal_pool = nn.AvgPool3d(pool_size, stride=1)
-        self.add_module("t{}_pool_roi".format(pathway), temporal_pool)
+        self.temporal_pool = nn.AvgPool3d(pool_size, stride=1)
+        # self.add_module("t{}_pool_roi".format(pathway), temporal_pool)
 
-        spatial_pool = nn.MaxPool2d(resolution, stride=1)
-        self.add_module("s{}_pool_roi".format(pathway), spatial_pool)
+        self.spatial_pool = nn.MaxPool2d(resolution, stride=1)
+        # self.add_module("s{}_pool_roi".format(pathway), spatial_pool)
         
         self.pathway = pathway
     
     def forward(self, input, bboxes, masks):
         B, C, T = input.shape[0:3]
-        input_bbox = input.clone()
         # B, C, T, H, W -> B, T, C, H, W
-        input_bbox = input_bbox.permute((0, 2, 1, 3, 4))
-        input_bbox = input_bbox.contiguous()
+        input = input.permute((0, 2, 1, 3, 4))
+        input = input.contiguous()
         # B*T, C, H, W
-        input_bbox = input_bbox.view(-1, *input_bbox.shape[2:])
-        roi_align = getattr(self, "s{}_roi".format(self.pathway))
+        input = input.view(-1, *input.shape[2:])
+        # roi_align = getattr(self, "s{}_roi".format(self.pathway))
         # B*T*N, C, output_size[0], output_size[1]
-        out = roi_align(input_bbox, bboxes)
+        out = self.roi_align(input, bboxes)
         output_sizes = out.shape[2:4]
 
         # B*T*N, 1, 1, 1
@@ -52,15 +52,15 @@ class RoiAlignComponent(nn.Module):
         # Perform Temporal Pooling
         # B, T, C, output_size[0], output_size[1] ->  B, C, T, output_size[0], output_size[1]
         out = out.permute((0, 2, 1, 3, 4))
-        t_pool = getattr(self, "t{}_pool_roi".format(self.pathway))
+        # t_pool = getattr(self, "t{}_pool_roi".format(self.pathway))
         # B, C, 1, output_size[0], output_size[1]
-        out_t = t_pool(out).squeeze(dim=2)
+        out_t = self.temporal_pool(out).squeeze(dim=2)
         
         # Perform Spatial Pooling
         # B, C, output_size[0], output_size[1]
-        s_pool = getattr(self, "s{}_pool_roi".format(self.pathway))
+        # s_pool = getattr(self, "s{}_pool_roi".format(self.pathway))
         # B, C, 1, 1, 1
-        out_s = s_pool(out_t).unsqueeze(dim=2)
+        out_s = self.spatial_pool(out_t).unsqueeze(dim=2)
         return out_s
 
 
@@ -85,7 +85,7 @@ class ResNetBboxClassifierHead(nn.Module):
         self.num_classes = num_classes
         self.num_pathways = len(pool_size)
         self.resolution = resolution
-        
+
         for pathway in range(self.num_pathways):
             for pathway_roi_type in roi_type[pathway]:
                 if pathway_roi_type == 0:
@@ -124,6 +124,7 @@ class ResNetBboxClassifierHead(nn.Module):
             len(inputs) == self.num_pathways
         ), "Input tensor does not contain {} pathway".format(self.num_pathways)
         pool_out = []
+        bboxes_i = 0
         for pathway in range(self.num_pathways):
             input = inputs[pathway]
             assert len(input.shape) == 5
@@ -136,8 +137,9 @@ class ResNetBboxClassifierHead(nn.Module):
                 else:
                     roi_comp = getattr(self, "roi_comp_{}".format(pathway))
                     input_normal = input.detach().clone()
-                    out_s_normal = roi_comp(input_normal)
-                print(out_s_normal.shape)
+                    out_s_normal = roi_comp(input_normal, bboxes[bboxes_i], masks[bboxes_i])
+                    bboxes_i += 1
+
                 pool_out.append(out_s_normal)
 
         # B x Cs x 1 x 1 x 1

@@ -133,7 +133,7 @@ class SlowFastBbox(nn.Module):
         super(SlowFastBbox, self).__init__()
         self.cfg = cfg
         self.num_pathways = 2
-        # self.slow_fast = SlowFast(cfg)
+        self.slow_fast = SlowFast(cfg)
         pool_size = _POOL1[cfg.MODEL.ARCH] 
         slow_pool_size = [[
                             cfg.DATA.NUM_FRAMES
@@ -170,7 +170,6 @@ class SlowFastBbox(nn.Module):
             roi_type = [[0,1],[1]]
         
         dim_in = [cfg.RESNET.WIDTH_PER_GROUP * 32] * len(roi_type[0]) + [cfg.RESNET.WIDTH_PER_GROUP * 32 // cfg.SLOWFAST.BETA_INV] * len(roi_type[1])
-        print(dim_in)
         
         self.bbox_head = head_helper.ResNetBboxClassifierHead(
             dim_in=dim_in,
@@ -197,7 +196,8 @@ class SlowFastBbox(nn.Module):
 
         slow_fast_model.head = nn.Identity()
         self.slow_fast = slow_fast_model 
-        self.slow_fast = self.slow_fast.cuda()
+        cur_device = torch.cuda.current_device()
+        self.slow_fast = self.slow_fast.cuda(device=cur_device)
         # print(self.slow_fast)
 
     def forward(self, x, bboxes=None, masks=None):
