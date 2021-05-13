@@ -1012,6 +1012,7 @@ class EPICTestMeter(object):
         self.iter_timer = Timer()
         self.num_clips = num_clips
         self.overall_iters = overall_iters
+        self.num_cls = num_cls
         # Initialize tensors.
         self.verb_video_preds = torch.zeros((num_videos, num_cls[0]))
         self.noun_video_preds = torch.zeros((num_videos, num_cls[1]))
@@ -1048,10 +1049,20 @@ class EPICTestMeter(object):
         """
         for ind in range(preds[0].shape[0]):
             vid_id = int(clip_ids[ind]) // self.num_clips
-            self.verb_video_labels[vid_id] = labels[0][ind]
-            self.verb_video_preds[vid_id] += preds[0][ind]
-            self.noun_video_labels[vid_id] = labels[1][ind]
-            self.noun_video_preds[vid_id] += preds[1][ind]
+            if labels[0][ind].item() >= self.num_cls[0]:
+                self.verb_video_labels[vid_id] = torch.zeros(1)
+                crt = torch.zeros(self.num_cls[0])
+                crt[0] = 1
+                self.verb_video_preds[vid_id] += crt
+                self.noun_video_labels[vid_id] = torch.zeros(1)
+                crt = torch.zeros(self.num_cls[1])
+                crt[0] = 1
+                self.noun_video_preds[vid_id] += crt
+            else:
+                self.verb_video_labels[vid_id] = labels[0][ind]
+                self.verb_video_preds[vid_id] += preds[0][ind]
+                self.noun_video_labels[vid_id] = labels[1][ind]
+                self.noun_video_preds[vid_id] += preds[1][ind]
             self.metadata[vid_id] = metadata['narration_id'][ind]
             self.clip_count[vid_id] += 1
 

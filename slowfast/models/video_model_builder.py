@@ -231,6 +231,8 @@ class SlowFast(nn.Module):
                 comments of the config file.
         """
         super(SlowFast, self).__init__()
+        self.extract_mstcn_features = cfg.TEST.EXTRACT_MSTCN_FEATURES
+        self.extract_features = cfg.TEST.EXTRACT_FEATURES
         self.enable_detection = cfg.DETECTION.ENABLE
         self.num_pathways = 2
         self._construct_network(cfg)
@@ -444,6 +446,7 @@ class SlowFast(nn.Module):
                     ],
                 ],
                 dropout_rate=cfg.MODEL.DROPOUT_RATE,
+                feature_extraction=self.extract_features and self.extract_mstcn_features,
             )
 
     def forward(self, x, bboxes=None):
@@ -459,11 +462,20 @@ class SlowFast(nn.Module):
         x = self.s4(x)
         x = self.s4_fuse(x)
         x = self.s5(x)
+        if not self.extract_mstcn_features and self.extract_features:
+            xs = []
+            for pathway in range(self.num_pathways):
+                xs.append(x[pathway].clone().detach())
+
         if self.enable_detection:
             x = self.head(x, bboxes)
         else:
             x = self.head(x)
-        return x
+        
+        if not self.extract_mstcn_features and self.extract_features:
+            return x, xs
+        else:
+            return x
 
     def freeze_fn(self, freeze_mode):
 

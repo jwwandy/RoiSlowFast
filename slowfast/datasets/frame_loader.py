@@ -33,7 +33,7 @@ def pack_frames_to_video_clip(cfg, video_record, temporal_sample_index, target_f
     fps, sampling_rate, num_samples = video_record.fps, cfg.DATA.SAMPLING_RATE, cfg.DATA.NUM_FRAMES
     start_idx, end_idx = get_start_end_idx(
         video_record.num_frames,
-        num_samples * sampling_rate * fps / target_fps,
+        num_samples * sampling_rate, #* fps / target_fps
         temporal_sample_index,
         cfg.TEST.NUM_ENSEMBLE_VIEWS,
     )

@@ -49,10 +49,14 @@ def perform_test(test_loader, model, test_meter, cfg):
 
     test_meter.iter_tic()
 
+    if not cfg.TEST.EXTRACT_MSTCN_FEATURES and cfg.TEST.EXTRACT_FEATURES:
+        x_feat_list = [[],[]]
+    elif cfg.TEST.EXTRACT_MSTCN_FEATURES and cfg.TEST.EXTRACT_FEATURES:
+        x_feat_list = []
     # for cur_iter, (inputs, bboxs, masks, labels, video_idx, meta) in enumerate(test_loader):
     for cur_iter, output_dict in enumerate(test_loader):
         if cur_iter % 100 == 0:
-            print(cur_iter)
+            logger.info("Testing iter={}".format(cur_iter))
     
         inputs = output_dict['inputs']
         labels = output_dict['label'] 
@@ -112,9 +116,14 @@ def perform_test(test_loader, model, test_meter, cfg):
             if cfg.EPICKITCHENS.USE_BBOX:
                 bboxs = to_cuda(bboxs)
                 masks = to_cuda(masks)
-                preds = model(inputs, bboxes=bboxs, masks=masks)
+                preds_pair = model(inputs, bboxes=bboxs, masks=masks)
             else:
-                preds = model(inputs)
+                preds_pair = model(inputs)
+            
+            if cfg.TEST.EXTRACT_FEATURES:
+                preds, x_feat = preds_pair
+            else:
+                preds = preds_pair
 
             if isinstance(labels, (dict,)):
                 # Gather all the predictions across all the devices to perform ensemble.
@@ -130,10 +139,28 @@ def perform_test(test_loader, model, test_meter, cfg):
                     metadata = {'narration_id': []}
                     for i in range(len(meta)):
                         metadata['narration_id'].extend(meta[i]['narration_id'])
+                    
+                    
+                    if not cfg.TEST.EXTRACT_MSTCN_FEATURES and cfg.TEST.EXTRACT_FEATURES:
+                        x_feat_slow, x_feat_fast = du.all_gather([x_feat[0], x_feat[1]])
+                        #print(x_feat_slow.shape, x_feat_fast.shape)
+                        ##torch.Size([8, 2048, 8, 7, 7]) torch.Size([8, 256, 32, 7, 7])
+                        x_feat_list[0] += [x_feat_slow]
+                        x_feat_list[1] += [x_feat_fast]
+                    elif cfg.TEST.EXTRACT_MSTCN_FEATURES and cfg.TEST.EXTRACT_FEATURES:
+                        x_feat = du.all_gather([x_feat])
+                        x_feat_list.append(x_feat[0])
                 else:
                     metadata = meta
                     verb_preds, verb_labels, video_idx = preds[0], labels['verb'], video_idx
                     noun_preds, noun_labels, video_idx = preds[1], labels['noun'], video_idx
+                    if not cfg.TEST.EXTRACT_MSTCN_FEATURES and cfg.TEST.EXTRACT_FEATURES:
+                        x_feat_list[0].append(x_feat[0])
+                        x_feat_list[1].append(x_feat[1])
+                    elif cfg.TEST.EXTRACT_MSTCN_FEATURES and cfg.TEST.EXTRACT_FEATURES:
+                        x_feat_list.append(x_feat)
+                    
+                    
                 test_meter.iter_toc()
                 # Update and log stats.
                 test_meter.update_stats(
@@ -168,7 +195,18 @@ def perform_test(test_loader, model, test_meter, cfg):
         test_meter.finalize_metrics()
         preds, labels, metadata = None, None, None
     test_meter.reset()
-    return preds, labels, metadata
+    
+    if cfg.TEST.EXTRACT_FEATURES:
+        if not cfg.TEST.EXTRACT_MSTCN_FEATURES and cfg.TEST.EXTRACT_FEATURES:
+            final_feat_list = [[],[]]
+            final_feat_list[0] = [t.cpu() for t in x_feat_list[0]]
+            final_feat_list[1] = [t.cpu() for t in x_feat_list[1]]
+        elif cfg.TEST.EXTRACT_MSTCN_FEATURES and cfg.TEST.EXTRACT_FEATURES:
+            final_feat_list = [t.cpu() for t in x_feat_list]
+        
+        return preds, labels, metadata, final_feat_list
+    else:
+        return preds, labels, metadata
 
 def test_from_train(model, cfg, cnt=-1):
     test_loader = loader.construct_loader(cfg, "test")
@@ -300,7 +338,11 @@ def test(cfg, cnt=-1):
         logger.info("Testing with random initialization. Only for debugging.")
 
     # Create video testing loaders.
-    test_loader = loader.construct_loader(cfg, "test")
+    if cfg.TEST.EXTRACT_FEATURES_MODE != "" and cfg.TEST.EXTRACT_FEATURES_MODE in ["test","train","val"]:
+        test_loader = loader.construct_loader(cfg, cfg.TEST.EXTRACT_FEATURES_MODE)
+    else:
+        test_loader = loader.construct_loader(cfg, "test")
+
     logger.info("Testing model for {} iterations".format(len(test_loader)))
 
     if cfg.DETECTION.ENABLE:
@@ -331,9 +373,11 @@ def test(cfg, cnt=-1):
             )
 
     
-
     pickle.dump([], open(file_path, 'wb+'))
-    preds, labels, metadata = perform_test(test_loader, model, test_meter, cfg)
+    if cfg.TEST.EXTRACT_FEATURES:
+        preds, labels, metadata, x_feat_list = perform_test(test_loader, model, test_meter, cfg)
+    else:
+        preds, labels, metadata = perform_test(test_loader, model, test_meter, cfg)
 
     if du.is_master_proc():
         if cfg.TEST.DATASET == 'epickitchens':
@@ -345,6 +389,23 @@ def test(cfg, cnt=-1):
             scores_path = os.path.join(cfg.OUTPUT_DIR, 'scores')
             if not os.path.exists(scores_path):
                 os.makedirs(scores_path)
-            # file_name = '{}.pkl'.format(cfg.EPICKITCHENS.TEST_SPLIT)
-            # file_path = os.path.join(scores_path, file_name)
             pickle.dump(results, open(file_path, 'wb'))
+
+            if cfg.TEST.EXTRACT_FEATURES:
+                pid = cfg.EPICKITCHENS.FEATURE_VID.split("_")[0]
+                if not os.path.exists(os.path.join(cfg.TEST.EXTRACT_FEATURES_PATH, pid)):
+                    os.mkdir(os.path.join(cfg.TEST.EXTRACT_FEATURES_PATH, pid))
+                if not cfg.TEST.EXTRACT_MSTCN_FEATURES and cfg.TEST.EXTRACT_FEATURES:
+                    arr_slow = torch.cat(x_feat_list[0], dim=0).numpy()
+                    arr_fast = torch.cat(x_feat_list[1], dim=0).numpy()
+                    print(arr_slow.shape, arr_fast.shape)
+                    fpath_feat = os.path.join(cfg.TEST.EXTRACT_FEATURES_PATH, pid, '{}.pkl'.format(cfg.EPICKITCHENS.FEATURE_VID))
+                    with open(fpath_feat,'wb+') as f:
+                        pickle.dump([arr_slow, arr_fast], f)
+                elif cfg.TEST.EXTRACT_MSTCN_FEATURES and cfg.TEST.EXTRACT_FEATURES:
+                    fpath_feat = os.path.join(cfg.TEST.EXTRACT_FEATURES_PATH, pid, '{}.npy'.format(cfg.EPICKITCHENS.FEATURE_VID))
+                    with open(fpath_feat,'wb+') as f:
+                        arr = torch.cat(x_feat_list, dim=0).numpy()
+                        print(arr.shape)
+                        np.save(f, arr)
+                    

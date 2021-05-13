@@ -314,6 +314,7 @@ class ResNetBasicHead(nn.Module):
         pool_size,
         dropout_rate=0.0,
         act_func="softmax",
+        feature_extraction=False,
     ):
         """
         The `__init__` method of any subclass should also contain these
@@ -338,7 +339,7 @@ class ResNetBasicHead(nn.Module):
             len({len(pool_size), len(dim_in)}) == 1
         ), "pathway dimensions are not consistent."
         self.num_pathways = len(pool_size)
-
+        self.feature_extraction = feature_extraction
         for pathway in range(self.num_pathways):
             avg_pool = nn.AvgPool3d(pool_size[pathway], stride=1)
             self.add_module("pathway{}_avgpool".format(pathway), avg_pool)
@@ -373,6 +374,14 @@ class ResNetBasicHead(nn.Module):
             m = getattr(self, "pathway{}_avgpool".format(pathway))
             pool_out.append(m(inputs[pathway]))
         x = torch.cat(pool_out, 1)
+        x_feat = None
+        if self.feature_extraction:
+            x_feat = x.clone()
+            if not self.training:
+                x_feat = x_feat.mean([2, 3, 4])
+            # assert x_feat.shape[2] == x_feat.shape[3] == x_feat.shape[4] == 1
+            x_feat = x_feat.view(x.shape[0], -1).detach() #.cpu()
+
         # (N, C, T, H, W) -> (N, T, H, W, C).
         x = x.permute((0, 2, 3, 4, 1))
         # Perform dropout.
@@ -395,7 +404,10 @@ class ResNetBasicHead(nn.Module):
                 x_n = x_n.mean([1, 2, 3])
 
             x_n = x_n.view(x_n.shape[0], -1)
-            return (x_v, x_n)
+            if self.feature_extraction:
+                return (x_v, x_n), x_feat
+            else:
+                return (x_v, x_n)
         else:
             x = self.projection(x)
 
@@ -405,4 +417,7 @@ class ResNetBasicHead(nn.Module):
                 x = x.mean([1, 2, 3])
 
             x = x.view(x.shape[0], -1)
-            return x
+            if self.feature_extraction:
+                return x, x_feat
+            else:
+                return x
