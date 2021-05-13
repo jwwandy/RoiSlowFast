@@ -83,4 +83,5 @@ NUM_SHARDS: 1
 RNG_SEED: 0
 LOG_PERIOD: 30
 ACC_LOG_PERIOD_RATIO: 1
-OUTPUT_DIR: '/raid/xiaoyuz1/EPIC/slowfast_experiment/all_1'
+OUTPUT_DIR: '/raid/xiaoyuz1/EPIC/slowfast_experiment/test_5_12'
+ENABLE_WANDB: False

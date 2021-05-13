@@ -127,9 +127,9 @@ def train_epoch(train_loader, model, optimizer, train_meter, cur_epoch, cfg, cnt
                 # Compute the verb accuracies.
                 verb_top1_acc, verb_top5_acc = metrics.topk_accuracies(preds[0], labels['verb'], (1, 5))
                 
-                predicted_answer_softmax = torch.nn.Softmax(dim=1)(preds[0])
-                predicted_answer_max = torch.max(predicted_answer_softmax.data, 1).indices
-                print(cnt, predicted_answer_max, labels['verb'])
+                # predicted_answer_softmax = torch.nn.Softmax(dim=1)(preds[0])
+                # predicted_answer_max = torch.max(predicted_answer_softmax.data, 1).indices
+                # print(cnt, predicted_answer_max, labels['verb'])
 
                 # Gather all the predictions across all the devices.
                 if cfg.NUM_GPUS > 1:

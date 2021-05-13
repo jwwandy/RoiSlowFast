@@ -37,14 +37,14 @@ class Epickitchens(torch.utils.data.Dataset):
         # the frames.
         if self.mode in ["train", "val", "train+val"]:
             self._num_clips = 1
-            self.mod_ratio = cfg.TRAIN.BATCH_SIZE
+            self.mod_ratio = cfg.TRAIN.BATCH_SIZE if cfg.NUM_GPUS > 1 else 1
         
         elif self.mode in ["test"]:
             self._num_clips = (
                     cfg.TEST.NUM_ENSEMBLE_VIEWS * cfg.TEST.NUM_SPATIAL_CROPS
             )
             self.emsemble_views = cfg.TEST.NUM_ENSEMBLE_VIEWS
-            self.mod_ratio = cfg.TEST.BATCH_SIZE
+            self.mod_ratio = cfg.TEST.BATCH_SIZE if cfg.NUM_GPUS > 1 else 1
 
         logger.info("Constructing EPIC-KITCHENS {}...".format(mode))
         self._construct_loader()

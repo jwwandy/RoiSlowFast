@@ -338,6 +338,8 @@ _C.SOLVER.OPTIMIZING_METHOD = "sgd"
 # Misc options
 # ---------------------------------------------------------------------------- #
 
+_C.ENABLE_WANDB = False
+
 # Number of GPUs to use (applies to both training and testing).
 _C.NUM_GPUS = 1
 

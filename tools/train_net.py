@@ -94,8 +94,7 @@ def train(cfg):
         # cfg.TRAIN.CHECKPOINT_TYPE == "caffe2"
         logger.info("Load from slowfast.")
         model.load_weight_slowfast(slow_fast_model)
-        # model.load_weight_slowfast()
-
+        
     # if du.is_master_proc():
     #     misc.log_model_info(model, cfg, is_train=True)
 

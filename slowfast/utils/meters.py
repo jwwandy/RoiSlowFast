@@ -648,9 +648,11 @@ class EPICTrainMeter(object):
         self.num_noun_top1_cor = 0
         self.num_noun_top5_cor = 0
         self.num_samples = 0
-
-        wandb.login()
-        wandb.init(project='bbox', entity='slowfast')
+        
+        self.enable_wandb = cfg.ENABLE_WANDB
+        if cfg.ENABLE_WANDB:
+            wandb.login()
+            wandb.init(project='bbox', entity='slowfast')
 
     def reset(self):
         """
@@ -755,18 +757,39 @@ class EPICTrainMeter(object):
             "mem": int(np.ceil(mem_usage)),
         }
         logging.log_json_stats(stats)
-        # wandb_dict = {
-        #     "train/verb_top1_acc": self.mb_verb_top1_acc.get_win_median(),
-        #     "train/verb_top5_acc": self.mb_verb_top5_acc.get_win_median(),
-        #     "train/noun_top1_acc": self.mb_noun_top1_acc.get_win_median(),
-        #     "train/noun_top5_acc": self.mb_noun_top5_acc.get_win_median(),
-        #     "train/top1_acc": self.mb_top1_acc.get_win_median(),
-        #     "train/top5_acc": self.mb_top5_acc.get_win_median(),
-        #     "train/verb_loss": self.loss_verb.get_win_median(),
-        #     "train/noun_loss": self.loss_noun.get_win_median(),
-        #     "train/loss": self.loss.get_win_median(),
-        # }
-        # wandb.log(wandb_dict, step=cnt)
+        if self.enable_wandb:
+            # wandb_dict = {
+            #     "train/verb_top1_acc": self.mb_verb_top1_acc.get_win_median(),
+            #     "train/verb_top5_acc": self.mb_verb_top5_acc.get_win_median(),
+            #     "train/noun_top1_acc": self.mb_noun_top1_acc.get_win_median(),
+            #     "train/noun_top5_acc": self.mb_noun_top5_acc.get_win_median(),
+            #     "train/top1_acc": self.mb_top1_acc.get_win_median(),
+            #     "train/top5_acc": self.mb_top5_acc.get_win_median(),
+            #     "train/verb_loss": self.loss_verb.get_win_median(),
+            #     "train/noun_loss": self.loss_noun.get_win_median(),
+            #     "train/loss": self.loss.get_win_median(),
+            # }
+            wandb_dict = {
+                "train/accmulate_verb_top1_acc": self.num_verb_top1_cor / self.num_samples,
+                "train/accmulate_verb_top5_acc": self.num_verb_top5_cor / self.num_samples,
+                "train/accmulate_noun_top1_acc": self.num_noun_top1_cor / self.num_samples,
+                "train/accmulate_noun_top5_acc": self.num_noun_top5_cor / self.num_samples,
+                "train/accmulate_top1_acc": self.num_top1_cor / self.num_samples,
+                "train/accmulate_top5_acc": self.num_top5_cor / self.num_samples,
+                "train/accmulate_verb_loss": self.loss_verb_total / self.num_samples,
+                "train/accmulate_noun_loss": self.loss_noun_total / self.num_samples,
+                "train/accmulate_loss": self.loss_total / self.num_samples,
+                "train/verb_top1_acc": self.mb_verb_top1_acc.get_win_median(),
+                "train/verb_top5_acc": self.mb_verb_top5_acc.get_win_median(),
+                "train/noun_top1_acc": self.mb_noun_top1_acc.get_win_median(),
+                "train/noun_top5_acc": self.mb_noun_top5_acc.get_win_median(),
+                "train/top1_acc": self.mb_top1_acc.get_win_median(),
+                "train/top5_acc": self.mb_top5_acc.get_win_median(),
+                "train/verb_loss": self.loss_verb.get_win_median(),
+                "train/noun_loss": self.loss_noun.get_win_median(),
+                "train/loss": self.loss.get_win_median(),
+            }
+            wandb.log(wandb_dict, step=cnt)
 
         
 
@@ -807,7 +830,7 @@ class EPICTrainMeter(object):
             "lr": self.lr,
             "mem": int(np.ceil(mem_usage)),
         }
-        # logging.log_json_stats(stats)
+        logging.log_json_stats(stats)
 
 
 class EPICValMeter(object):
@@ -967,7 +990,7 @@ class EPICValMeter(object):
             "max_top5_acc": self.max_top5_acc,
             "mem": int(np.ceil(mem_usage)),
         }
-        # logging.log_json_stats(stats)
+        logging.log_json_stats(stats)
 
         # wandb_dict = {
         #     "val/verb_top1_acc": verb_top1_acc,
