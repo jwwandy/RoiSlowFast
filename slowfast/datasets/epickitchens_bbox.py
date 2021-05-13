@@ -47,6 +47,24 @@ def create_mask_2d(bboxs_len):
     mask = np.array([[True] * leni + [False] * (max_len - leni)  for i,leni in enumerate(bboxs_len)])
     return mask
 
+'''
+Fills the frames without bounding boxes with closes previous frame containing bounding boxes
+Assumes that not all T frames are 0
+Fills from left to right (T=0 to T = T-1)
+'''
+def fill_empty_boxes(bboxs, bboxs_len):
+    if len(bboxs_len) <= 0: 
+        return bboxs
+
+    T, max_len, last_dim = bboxs.shape
+    assert not np.all(bboxs_len == 0)
+    if bboxs_len[0] == 0:
+        first_non_empty = np.where(bboxs_len > 0)[0][0]
+        bboxs[0] = bboxs[first_non_empty]
+    for i in range(1, len(bboxs_len)):
+        if bboxs_len[i] == 0:
+            bboxs[i] = bboxs[i-1]
+    return bboxs
 
 def load_precomputed_bbox(cfg, video_ids):
     bboxs_dict = dict()
@@ -56,7 +74,8 @@ def load_precomputed_bbox(cfg, video_ids):
         bboxs, bboxs_len= None, None #(T, max_len, 7)
         with open(path_to_bbox,'rb') as f:
             bboxs,bboxs_len = pickle.load(f)
-        
+            bboxs = fill_empty_boxes(bboxs, bboxs_len) # Also modifies bboxs due to aliasing
+
         T, max_len, last_dim = bboxs.shape  
         
         mask = create_mask_2d(bboxs_len) #np.zeros((T, max_len)).astype(bool)
