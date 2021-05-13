@@ -132,39 +132,53 @@ class SlowFastBbox(nn.Module):
     def __init__(self, cfg):
         super(SlowFastBbox, self).__init__()
         self.cfg = cfg
-        self.enable_detection = cfg.DETECTION.ENABLE
         self.num_pathways = 2
-        self.slow_fast = SlowFast(cfg)
+        # self.slow_fast = SlowFast(cfg)
         pool_size = _POOL1[cfg.MODEL.ARCH] 
-        model_pool_size=[[
-                        cfg.DATA.NUM_FRAMES
-                        // cfg.SLOWFAST.ALPHA
-                        // pool_size[0][0],
-                        cfg.DATA.CROP_SIZE // 32 // pool_size[0][1],
-                        cfg.DATA.CROP_SIZE // 32 // pool_size[0][2],
-                    ],
-                    [
-                        cfg.DATA.NUM_FRAMES // pool_size[1][0],
-                        1,
-                        1,
-                    ],
-                ]
-        extra_fast_pool_size=[
-            cfg.DATA.NUM_FRAMES // pool_size[1][0],
-            cfg.DATA.CROP_SIZE // 32 // pool_size[1][1],
-            cfg.DATA.CROP_SIZE // 32 // pool_size[1][2],
-        ]
+        slow_pool_size = [[
+                            cfg.DATA.NUM_FRAMES
+                            // cfg.SLOWFAST.ALPHA
+                            // pool_size[0][0],
+                            cfg.DATA.CROP_SIZE // 32 // pool_size[0][1],
+                            cfg.DATA.CROP_SIZE // 32 // pool_size[0][2],
+                        ],
+                        [
+                            cfg.DATA.NUM_FRAMES
+                            // cfg.SLOWFAST.ALPHA
+                            // pool_size[0][0],
+                            1,
+                            1,
+                        ],
+                    ]
+        fast_pool_size = [[
+                            cfg.DATA.NUM_FRAMES // pool_size[1][0],
+                            cfg.DATA.CROP_SIZE // 32 // pool_size[1][1],
+                            cfg.DATA.CROP_SIZE // 32 // pool_size[1][2],
+                        ],
+                        [
+                            cfg.DATA.NUM_FRAMES // pool_size[1][0],
+                            1,
+                            1,
+                        ],
+                    ]
+        model_pool_size = [slow_pool_size, fast_pool_size]
+        if cfg.EPICKITCHENS.ROI_BRANCH == 1:
+            roi_type = [[0],[1]]
+        elif cfg.EPICKITCHENS.ROI_BRANCH == 0:
+            roi_type = [[1],[0]]
+        elif cfg.EPICKITCHENS.ROI_BRANCH == 2:
+            roi_type = [[0,1],[1]]
+        
+        dim_in = [cfg.RESNET.WIDTH_PER_GROUP * 32] * len(roi_type[0]) + [cfg.RESNET.WIDTH_PER_GROUP * 32 // cfg.SLOWFAST.BETA_INV] * len(roi_type[1])
+        print(dim_in)
+        
         self.bbox_head = head_helper.ResNetBboxClassifierHead(
-            dim_in=[
-                cfg.RESNET.WIDTH_PER_GROUP * 32,
-                cfg.RESNET.WIDTH_PER_GROUP * 32 // cfg.SLOWFAST.BETA_INV,
-                # cfg.RESNET.WIDTH_PER_GROUP * 32 // cfg.SLOWFAST.BETA_INV,
-            ],
+            dim_in=dim_in,
             num_classes=cfg.MODEL.NUM_CLASSES, 
             pool_size=model_pool_size,
+            roi_type=roi_type,
             resolution=[[cfg.DETECTION.ROI_XFORM_RESOLUTION] * 2] * 2, 
             scale_factor=[cfg.DATA.CROP_SIZE // cfg.DETECTION.ROI_XFORM_RESOLUTION] * 2,
-            extra_fast_pool_size = None,
             act_func="softmax",
             aligned=cfg.DETECTION.ALIGNED,
         )

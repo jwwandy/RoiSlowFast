@@ -7,15 +7,72 @@ import torch
 import torch.nn as nn
 from detectron2.layers import ROIAlign
 
+class RoiAlignComponent(nn.Module):
+    def __init__(self, pool_size, resolution, scale_factor, pathway, aligned=True):
+        super().__init__()
+        roi_align = ROIAlign(
+            resolution,
+            spatial_scale=1.0 / scale_factor,
+            sampling_ratio=0,
+            aligned=aligned,
+        )
+        self.add_module("s{}_roi".format(pathway), roi_align)
+        
+        temporal_pool = nn.AvgPool3d(pool_size, stride=1)
+        self.add_module("t{}_pool_roi".format(pathway), temporal_pool)
+
+        spatial_pool = nn.MaxPool2d(resolution, stride=1)
+        self.add_module("s{}_pool_roi".format(pathway), spatial_pool)
+        
+        self.pathway = pathway
+    
+    def forward(self, input, bboxes, masks):
+        B, C, T = input.shape[0:3]
+        input_bbox = input.clone()
+        # B, C, T, H, W -> B, T, C, H, W
+        input_bbox = input_bbox.permute((0, 2, 1, 3, 4))
+        input_bbox = input_bbox.contiguous()
+        # B*T, C, H, W
+        input_bbox = input_bbox.view(-1, *input_bbox.shape[2:])
+        roi_align = getattr(self, "s{}_roi".format(self.pathway))
+        # B*T*N, C, output_size[0], output_size[1]
+        out = roi_align(input_bbox, bboxes)
+        output_sizes = out.shape[2:4]
+
+        # B*T*N, 1, 1, 1
+        masks = masks.view(-1, 1, 1, 1)
+        out = out * masks
+        # B, T, N, C, output_size[0], output_size[1]
+        out = out.view(B, T, len(masks)//(B*T), C, output_sizes[0], output_sizes[1])
+        masks_denom = masks.view(B, T, -1).sum(2)
+        masks_denom = masks_denom.view(B, T, 1, 1, 1)
+        # B, T, C, output_size[0], output_size[1]
+        out = out.sum(2) / (masks_denom + 1e-8)
+        
+        # Perform Temporal Pooling
+        # B, T, C, output_size[0], output_size[1] ->  B, C, T, output_size[0], output_size[1]
+        out = out.permute((0, 2, 1, 3, 4))
+        t_pool = getattr(self, "t{}_pool_roi".format(self.pathway))
+        # B, C, 1, output_size[0], output_size[1]
+        out_t = t_pool(out).squeeze(dim=2)
+        
+        # Perform Spatial Pooling
+        # B, C, output_size[0], output_size[1]
+        s_pool = getattr(self, "s{}_pool_roi".format(self.pathway))
+        # B, C, 1, 1, 1
+        out_s = s_pool(out_t).unsqueeze(dim=2)
+        return out_s
+
+
 class ResNetBboxClassifierHead(nn.Module):
     def __init__(
         self,
         dim_in,
         num_classes,
         pool_size,
+        roi_type,
         resolution,
         scale_factor,
-        extra_fast_pool_size=None,
         dropout_rate=0.0,
         act_func="softmax",
         aligned=True,
@@ -28,31 +85,16 @@ class ResNetBboxClassifierHead(nn.Module):
         self.num_classes = num_classes
         self.num_pathways = len(pool_size)
         self.resolution = resolution
-        self.extra_fast_pool_size = extra_fast_pool_size
+        
         for pathway in range(self.num_pathways):
-            # No temporal pooling
-            if self.num_pathways and pathway == 0:
-                avg_pool = nn.AvgPool3d(pool_size[pathway])
-                self.add_module("avg_pool_{}".format(pathway), avg_pool)
-            else:
-                if extra_fast_pool_size is not None:
-                    avg_pool = nn.AvgPool3d(extra_fast_pool_size)
-                    self.add_module("avg_pool_{}".format(pathway), avg_pool)
-
-                roi_align = ROIAlign(
-                    resolution[pathway],
-                    spatial_scale=1.0 / scale_factor[pathway],
-                    sampling_ratio=0,
-                    aligned=aligned,
-                )
-                self.add_module("s{}_roi".format(pathway), roi_align)
-                
-                spatial_pool = nn.MaxPool2d(resolution[pathway], stride=1)
-                self.add_module("s{}_pool".format(pathway), spatial_pool)
-                
-                temporal_pool = nn.AvgPool3d(pool_size[pathway], stride=1)
-                self.add_module("t{}_pool".format(pathway), temporal_pool)
-
+            for pathway_roi_type in roi_type[pathway]:
+                if pathway_roi_type == 0:
+                    avg_pool = nn.AvgPool3d(pool_size[pathway][0])
+                    self.add_module("original_avg_pool_{}".format(pathway), avg_pool)
+                else:
+                    roi_comp = RoiAlignComponent(pool_size[pathway][1], resolution[pathway], scale_factor[pathway], pathway, aligned=aligned)
+                    self.add_module("roi_comp_{}".format(pathway), roi_comp)
+        self.roi_type = roi_type
         if dropout_rate > 0.0:
             self.dropout = nn.Dropout(dropout_rate)
 
@@ -84,64 +126,24 @@ class ResNetBboxClassifierHead(nn.Module):
         pool_out = []
         for pathway in range(self.num_pathways):
             input = inputs[pathway]
-            
             assert len(input.shape) == 5
-            # B, C, T, H, W
-            B, C, T = input.shape[0:3]
             
-            if self.num_pathways == 2 and pathway == 1:
-                # B, C, T, H, W -> B, T, C, H, W
-                input_bbox = input.clone()
-                input_bbox = input_bbox.permute((0, 2, 1, 3, 4))
-                # B*T, C, H, W
-                # print(input.shape, input.shape[2:])
-                input_bbox = input_bbox.contiguous()
-                input_bbox = input_bbox.view(-1, *input_bbox.shape[2:])
-                roi_align = getattr(self, "s{}_roi".format(pathway))
-                # B*T*N, C, output_size[0], output_size[1]
-                out = roi_align(input_bbox, bboxes)
-                output_sizes = out.shape[2:4]
-
-                # B*T*N, 1, 1, 1
-                masks = masks.view(-1, 1, 1, 1)
-                out = out * masks
-                # B, T, N, C, output_size[0], output_size[1]
-                out = out.view(B, T, len(masks)//(B*T), C, output_sizes[0], output_sizes[1])
-                masks_denom = masks.view(B, T, -1).sum(2)
-                masks_denom = masks_denom.view(B, T, 1, 1, 1)
-                # B, T, C, output_size[0], output_size[1]
-                out = out.sum(2) / (masks_denom + 1e-8)
-                # Perform Temporal Pooling
-                # B, T, C, output_size[0], output_size[1] ->  B, C, T, output_size[0], output_size[1]
-                out = out.permute((0, 2, 1, 3, 4))
-                t_pool = getattr(self, "t{}_pool".format(pathway))
-                # B, C, 1, output_size[0], output_size[1]
-                out_t = t_pool(out).squeeze(dim=2)
-                
-                # Perform Spatial Pooling
-                # B, C, output_size[0], output_size[1]
-                s_pool = getattr(self, "s{}_pool".format(pathway))
-                # B, C, 1, 1, 1
-                out_s = s_pool(out_t).unsqueeze(dim=2)
-                # Spatial Pool 出來後 will be B x C x 1 x 1 x 1
-                pool_out.append(out_s)
-
-                if self.extra_fast_pool_size is None:
-                    continue
-
-            # else:
-            # B, C, T, H, W
-            avg_pool = getattr(self, "avg_pool_{}".format(pathway))
-            # B, C, 1, 1, 1
-            input_normal = input.clone()
-            out_s_normal = avg_pool(input_normal)
-            pool_out.append(out_s_normal)
+            for pathway_roi_type in self.roi_type[pathway]:
+                if pathway_roi_type == 0:
+                    avg_pool = getattr(self, "original_avg_pool_{}".format(pathway))
+                    input_normal = input.detach().clone()
+                    out_s_normal = avg_pool(input_normal)
+                else:
+                    roi_comp = getattr(self, "roi_comp_{}".format(pathway))
+                    input_normal = input.detach().clone()
+                    out_s_normal = roi_comp(input_normal)
+                print(out_s_normal.shape)
+                pool_out.append(out_s_normal)
 
         # B x Cs x 1 x 1 x 1
         x = torch.cat(pool_out, 1)
         # (N, C, T, H, W) -> (N, T, H, W, C).
         x = x.permute((0, 2, 3, 4, 1))
-        # print("before dropout: ", x.shape)
         # Perform dropout.
         if hasattr(self, "dropout"):
             x = self.dropout(x)
