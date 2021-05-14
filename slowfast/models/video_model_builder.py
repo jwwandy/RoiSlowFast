@@ -169,6 +169,12 @@ class SlowFastBbox(nn.Module):
             roi_type = [[1],[0]]
         elif cfg.EPICKITCHENS.ROI_BRANCH == 2:
             roi_type = [[0,1],[1]]
+        elif cfg.EPICKITCHENS.ROI_BRANCH == 3:
+            roi_type = [[0,1],[0]]
+        elif cfg.EPICKITCHENS.ROI_BRANCH == 4:
+            roi_type = [[0],[0,1]]
+        elif cfg.EPICKITCHENS.ROI_BRANCH == 5:
+            roi_type = [[0,1],[0,1]]
         
         dim_in = [cfg.RESNET.WIDTH_PER_GROUP * 32] * len(roi_type[0]) + [cfg.RESNET.WIDTH_PER_GROUP * 32 // cfg.SLOWFAST.BETA_INV] * len(roi_type[1])
         
@@ -182,6 +188,7 @@ class SlowFastBbox(nn.Module):
             act_func="softmax",
             aligned=cfg.DETECTION.ALIGNED,
         )
+        self.roi_type = roi_type
         init_helper.init_weights(
             self.bbox_head, cfg.MODEL.FC_INIT_STD, cfg.RESNET.ZERO_INIT_FINAL_BN
         )
@@ -190,10 +197,11 @@ class SlowFastBbox(nn.Module):
         if slow_fast_model is None:
             slow_fast_model = SlowFast(self.cfg)
         
-        slow_fast_verb_proj = slow_fast_model.head.projection_verb.state_dict()
-        slow_fast_noun_proj = slow_fast_model.head.projection_noun.state_dict()
-        self.bbox_head.projection_verb.load_state_dict(slow_fast_verb_proj)
-        self.bbox_head.projection_noun.load_state_dict(slow_fast_noun_proj)
+        if len(self.roi_type[0]) == 1 and  len(self.roi_type[1]) == 1:
+            slow_fast_verb_proj = slow_fast_model.head.projection_verb.state_dict()
+            slow_fast_noun_proj = slow_fast_model.head.projection_noun.state_dict()
+            self.bbox_head.projection_verb.load_state_dict(slow_fast_verb_proj)
+            self.bbox_head.projection_noun.load_state_dict(slow_fast_noun_proj)
 
         slow_fast_model.head = nn.Identity()
         self.slow_fast = slow_fast_model 

@@ -61,6 +61,7 @@ def construct_optimizer(model, cfg):
             nesterov=cfg.SOLVER.NESTEROV,
         )
     elif cfg.SOLVER.OPTIMIZING_METHOD == "adam":
+        print("Use Adam optimizer")
         return torch.optim.Adam(
             optim_params,
             lr=cfg.SOLVER.BASE_LR,

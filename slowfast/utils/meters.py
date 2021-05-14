@@ -610,6 +610,346 @@ class ValMeter(object):
 
         return is_best_epoch
 
+class EPICTrainMeterSimple(object):
+    """
+    Measure training stats.
+    """
+
+    def __init__(self, epoch_iters, cfg):
+        """
+        Args:
+            epoch_iters (int): the overall number of iterations of one epoch.
+            cfg (CfgNode): configs.
+        """
+        self._cfg = cfg
+        self.epoch_iters = epoch_iters
+        self.MAX_EPOCH = cfg.SOLVER.MAX_EPOCH * epoch_iters
+        self.iter_timer = Timer()
+        self.loss_total = 0.0
+        self.loss_verb_total = 0.0
+        self.loss_noun_total = 0.0
+        self.lr = None
+        # self.num_top1_cor = 0
+        # self.num_top5_cor = 0
+        self.num_verb_top1_cor = 0
+        self.num_verb_top5_cor = 0
+        self.num_noun_top1_cor = 0
+        self.num_noun_top5_cor = 0
+        self.num_samples = 0
+        print("cfg.LOG_PERIOD: ", cfg.LOG_PERIOD)
+
+    def reset(self):
+        """
+        Reset the Meter.
+        """
+        self.loss_total = 0.0
+        self.loss_verb_total = 0.0
+        self.loss_noun_total = 0.0
+        self.lr = None
+        # self.num_top1_cor = 0
+        # self.num_top5_cor = 0
+        self.num_verb_top1_cor = 0
+        self.num_verb_top5_cor = 0
+        self.num_noun_top1_cor = 0
+        self.num_noun_top5_cor = 0
+        self.num_samples = 0
+
+    def iter_tic(self):
+        """
+        Start to record time.
+        """
+        self.iter_timer.reset()
+
+    def iter_toc(self):
+        """
+        Stop to record time.
+        """
+        self.iter_timer.pause()
+
+    def update_stats(self, top1_acc, top5_acc, loss, lr, mb_size):
+        """
+        Update the current stats.
+        Args:
+            top1_acc (float): top1 accuracy rate.
+            top5_acc (float): top5 accuracy rate.
+            loss (float): loss value.
+            lr (float): learning rate.
+            mb_size (int): mini batch size.
+        """
+        self.lr = lr
+        # Aggregate stats
+        self.num_verb_top1_cor += top1_acc[0] * mb_size
+        self.num_verb_top5_cor += top5_acc[0] * mb_size
+        self.num_noun_top1_cor += top1_acc[1] * mb_size
+        self.num_noun_top5_cor += top5_acc[1] * mb_size
+        # self.num_top1_cor += top1_acc[2] * mb_size
+        # self.num_top5_cor += top5_acc[2] * mb_size
+        self.loss_verb_total += loss[0] * mb_size
+        self.loss_noun_total += loss[1] * mb_size
+        self.loss_total += loss[2] * mb_size
+        self.num_samples += mb_size
+
+    def log_iter_stats(self, cur_epoch, cur_iter, cnt):
+        """
+        log the stats of the current iteration.
+        Args:
+            cur_epoch (int): the number of current epoch.
+            cur_iter (int): the number of current iteration.
+        """
+        if (cur_iter + 1) % self._cfg.LOG_PERIOD != 0:
+            return
+        eta_sec = self.iter_timer.seconds() * (
+            self.MAX_EPOCH - (cur_epoch * self.epoch_iters + cur_iter + 1)
+        )
+        eta = str(datetime.timedelta(seconds=int(eta_sec)))
+        mem_usage = misc.gpu_mem_usage()
+        verb_top1_acc = self.num_verb_top1_cor / self.num_samples
+        verb_top5_acc = self.num_verb_top5_cor / self.num_samples
+        noun_top1_acc = self.num_noun_top1_cor / self.num_samples
+        noun_top5_acc = self.num_noun_top5_cor / self.num_samples
+        # top1_acc = self.num_top1_cor / self.num_samples
+        # top5_acc = self.num_top5_cor / self.num_samples
+        avg_loss_verb = self.loss_verb_total / self.num_samples
+        avg_loss_noun = self.loss_noun_total / self.num_samples
+        avg_loss = self.loss_total / self.num_samples
+        stats = {
+            "_type": "TRAIN_ITER___TRAIN_ITER___TRAIN_ITER___TRAIN_ITER",
+            "epoch": "{}/{}".format(cur_epoch + 1, self._cfg.SOLVER.MAX_EPOCH),
+            "iter": "{}/{}".format(cur_iter + 1, self.epoch_iters),
+            "time_diff": self.iter_timer.seconds(),
+            "eta": eta,
+            "verb_top1_acc": verb_top1_acc,
+            "verb_top5_acc": verb_top5_acc,
+            "noun_top1_acc": noun_top1_acc,
+            "noun_top5_acc": noun_top5_acc,
+            # "top1_acc": top1_acc,
+            # "top5_acc": top5_acc,
+            "verb_loss": avg_loss_verb,
+            "noun_loss": avg_loss_noun,
+            "loss": avg_loss,
+            "lr": self.lr,
+            "mem": int(np.ceil(mem_usage)),
+        }
+        logging.log_json_stats(stats)
+        if du.is_master_proc():
+            if self._cfg.ENABLE_WANDB:
+                print("Log Train")
+                wandb_dict = {
+                    "train/accmulate_verb_top1_acc": self.num_verb_top1_cor / self.num_samples,
+                    "train/accmulate_verb_top5_acc": self.num_verb_top5_cor / self.num_samples,
+                    "train/accmulate_noun_top1_acc": self.num_noun_top1_cor / self.num_samples,
+                    "train/accmulate_noun_top5_acc": self.num_noun_top5_cor / self.num_samples,
+                    # "train/accmulate_top1_acc": self.num_top1_cor / self.num_samples,
+                    # "train/accmulate_top5_acc": self.num_top5_cor / self.num_samples,
+                    "train/accmulate_verb_loss": self.loss_verb_total / self.num_samples,
+                    "train/accmulate_noun_loss": self.loss_noun_total / self.num_samples,
+                    "train/accmulate_loss": self.loss_total / self.num_samples,
+                }
+                wandb.log(wandb_dict, step=cnt)
+
+        
+
+    def log_epoch_stats(self, cur_epoch):
+        """
+        Log the stats of the current epoch.
+        Args:
+            cur_epoch (int): the number of current epoch.
+        """
+        eta_sec = self.iter_timer.seconds() * (
+            self.MAX_EPOCH - (cur_epoch + 1) * self.epoch_iters
+        )
+        eta = str(datetime.timedelta(seconds=int(eta_sec)))
+        mem_usage = misc.gpu_mem_usage()
+        verb_top1_acc = self.num_verb_top1_cor / self.num_samples
+        verb_top5_acc = self.num_verb_top5_cor / self.num_samples
+        noun_top1_acc = self.num_noun_top1_cor / self.num_samples
+        noun_top5_acc = self.num_noun_top5_cor / self.num_samples
+        # top1_acc = self.num_top1_cor / self.num_samples
+        # top5_acc = self.num_top5_cor / self.num_samples
+        avg_loss_verb = self.loss_verb_total / self.num_samples
+        avg_loss_noun = self.loss_noun_total / self.num_samples
+        avg_loss = self.loss_total / self.num_samples
+        stats = {
+            "_type": "~~~~~~TRAIN_EPOCH___TRAIN_EPOCH___TRAIN_EPOCH___TRAIN_EPOCH~~~~~~",
+            "epoch": "{}/{}".format(cur_epoch + 1, self._cfg.SOLVER.MAX_EPOCH),
+            "time_diff": self.iter_timer.seconds(),
+            "eta": eta,
+            "verb_top1_acc": verb_top1_acc,
+            "verb_top5_acc": verb_top5_acc,
+            "noun_top1_acc": noun_top1_acc,
+            "noun_top5_acc": noun_top5_acc,
+            # "top1_acc": top1_acc,
+            # "top5_acc": top5_acc,
+            "verb_loss": avg_loss_verb,
+            "noun_loss": avg_loss_noun,
+            "loss": avg_loss,
+            "lr": self.lr,
+            "mem": int(np.ceil(mem_usage)),
+        }
+        logging.log_json_stats(stats)
+
+class EPICValMeterSimple(object):
+    """
+    Measures validation stats.
+    """
+
+    def __init__(self, max_iter, cfg):
+        """
+        Args:
+            max_iter (int): the max number of iteration of the current epoch.
+            cfg (CfgNode): configs.
+        """
+        self._cfg = cfg
+        self.max_iter = max_iter
+        self.iter_timer = Timer()
+        # Max accuracies (over the full val set).
+        # self.max_top1_acc = 0.0
+        # self.max_top5_acc = 0.0
+        self.max_verb_top1_acc = 0.0
+        self.max_verb_top5_acc = 0.0
+        self.max_noun_top1_acc = 0.0
+        self.max_noun_top5_acc = 0.0
+        # Number of correctly classified examples.
+        # self.num_top1_cor = 0
+        # self.num_top5_cor = 0
+        self.num_verb_top1_cor = 0
+        self.num_verb_top5_cor = 0
+        self.num_noun_top1_cor = 0
+        self.num_noun_top5_cor = 0
+        self.num_samples = 0
+
+    def reset(self):
+        """
+        Reset the Meter.
+        """
+        self.iter_timer.reset()
+        # self.num_top1_cor = 0
+        # self.num_top5_cor = 0
+        self.num_verb_top1_cor = 0
+        self.num_verb_top5_cor = 0
+        self.num_noun_top1_cor = 0
+        self.num_noun_top5_cor = 0
+        self.num_samples = 0
+
+    def iter_tic(self):
+        """
+        Start to record time.
+        """
+        self.iter_timer.reset()
+
+    def iter_toc(self):
+        """
+        Stop to record time.
+        """
+        self.iter_timer.pause()
+
+    def update_stats(self, top1_acc, top5_acc, mb_size):
+        """
+        Update the current stats.
+        Args:
+            top1_acc (float): top1 accuracy rate.
+            top5_acc (float): top5 accuracy rate.
+            mb_size (int): mini batch size.
+        """
+        self.num_verb_top1_cor += top1_acc[0] * mb_size
+        self.num_verb_top5_cor += top5_acc[0] * mb_size
+        self.num_noun_top1_cor += top1_acc[1] * mb_size
+        self.num_noun_top5_cor += top5_acc[1] * mb_size
+        # self.num_top1_cor += top1_acc[2] * mb_size
+        # self.num_top5_cor += top5_acc[2] * mb_size
+        self.num_samples += mb_size
+
+    def log_iter_stats(self, cur_epoch, cur_iter, cnt):
+        """
+        log the stats of the current iteration.
+        Args:
+            cur_epoch (int): the number of current epoch.
+            cur_iter (int): the number of current iteration.
+        """
+        if (cur_iter + 1) % self._cfg.LOG_PERIOD != 0:
+            return
+        # eta_sec = self.iter_timer.seconds() * (self.max_iter - cur_iter - 1)
+        # eta = str(datetime.timedelta(seconds=int(eta_sec)))
+        # mem_usage = misc.gpu_mem_usage()
+        # stats = {
+        #     "_type": "VAL_ITER___VAL_ITER___VAL_ITER___VAL_ITER",
+        #     "epoch": "{}/{}".format(cur_epoch + 1, self._cfg.SOLVER.MAX_EPOCH),
+        #     "iter": "{}/{}".format(cur_iter + 1, self.max_iter),
+        #     "time_diff": self.iter_timer.seconds(),
+        #     "eta": eta,
+        #     "verb_top1_acc": self.mb_verb_top1_acc.get_win_median(),
+        #     "verb_top5_acc": self.mb_verb_top5_acc.get_win_median(),
+        #     "noun_top1_acc": self.mb_noun_top1_acc.get_win_median(),
+        #     "noun_top5_acc": self.mb_noun_top5_acc.get_win_median(),
+        #     "top1_acc": self.mb_top1_acc.get_win_median(),
+        #     "top5_acc": self.mb_top5_acc.get_win_median(),
+        #     "mem": int(np.ceil(mem_usage)),
+        # }
+        # logging.log_json_stats(stats)
+        
+
+    def log_epoch_stats(self, cur_epoch, cnt):
+        """
+        Log the stats of the current epoch.
+        Args:
+            cur_epoch (int): the number of current epoch.
+        """
+        verb_top1_acc = self.num_verb_top1_cor / self.num_samples
+        verb_top5_acc = self.num_verb_top5_cor / self.num_samples
+        noun_top1_acc = self.num_noun_top1_cor / self.num_samples
+        noun_top5_acc = self.num_noun_top5_cor / self.num_samples
+        # top1_acc = self.num_top1_cor / self.num_samples
+        # top5_acc = self.num_top5_cor / self.num_samples
+        self.max_verb_top1_acc = max(self.max_verb_top1_acc, verb_top1_acc)
+        self.max_verb_top5_acc = max(self.max_verb_top5_acc, verb_top5_acc)
+        self.max_noun_top1_acc = max(self.max_noun_top1_acc, noun_top1_acc)
+        self.max_noun_top5_acc = max(self.max_noun_top5_acc, noun_top5_acc)
+        # is_best_epoch = top1_acc > self.max_top1_acc
+        is_best_epoch = verb_top1_acc > self.max_verb_top1_acc
+        # self.max_top1_acc = max(self.max_top1_acc, top1_acc)
+        # self.max_top5_acc = max(self.max_top5_acc, top5_acc)
+        mem_usage = misc.gpu_mem_usage()
+        stats = {
+            "_type": "~~~~~~VAL_EPOCH___VAL_EPOCH___VAL_EPOCH___VAL_EPOCH~~~~~~",
+            "epoch": "{}/{}".format(cur_epoch + 1, self._cfg.SOLVER.MAX_EPOCH),
+            "time_diff": self.iter_timer.seconds(),
+            "verb_top1_acc": verb_top1_acc,
+            "verb_top5_acc": verb_top5_acc,
+            "noun_top1_acc": noun_top1_acc,
+            "noun_top5_acc": noun_top5_acc,
+            # "top1_acc": top1_acc,
+            # "top5_acc": top5_acc,
+            "max_verb_top1_acc": self.max_verb_top1_acc,
+            "max_verb_top5_acc": self.max_verb_top5_acc,
+            "max_noun_top1_acc": self.max_noun_top1_acc,
+            "max_noun_top5_acc": self.max_noun_top5_acc,
+            # "max_top1_acc": self.max_top1_acc,
+            # "max_top5_acc": self.max_top5_acc,
+            "mem": int(np.ceil(mem_usage)),
+        }
+        logging.log_json_stats(stats)
+
+        if du.is_master_proc():
+            if self._cfg.ENABLE_WANDB:
+                print("Log Eval")
+                wandb_dict = {
+                    "val/verb_top1_acc": verb_top1_acc,
+                    "val/verb_top5_acc": verb_top5_acc,
+                    "val/noun_top1_acc": noun_top1_acc,
+                    "val/noun_top5_acc": noun_top5_acc,
+                    # "val/top1_acc": top1_acc,
+                    # "val/top5_acc": top5_acc,
+                    "val/max_verb_top1_acc": self.max_verb_top1_acc,
+                    "val/max_verb_top5_acc": self.max_verb_top5_acc,
+                    "val/max_noun_top1_acc": self.max_noun_top1_acc,
+                    "val/max_noun_top5_acc": self.max_noun_top5_acc,
+                    # "val/max_top1_acc": self.max_top1_acc,
+                    # "val/max_top5_acc": self.max_top5_acc,
+                }
+                wandb.log(wandb_dict, step=cnt)
+
+        return is_best_epoch
+
 
 class EPICTrainMeter(object):
     """
@@ -734,26 +1074,6 @@ class EPICTrainMeter(object):
         )
         eta = str(datetime.timedelta(seconds=int(eta_sec)))
         mem_usage = misc.gpu_mem_usage()
-        # stats = {
-        #     "_type": "TRAIN_ITER___TRAIN_ITER___TRAIN_ITER___TRAIN_ITER",
-        #     "epoch": "{}/{}".format(cur_epoch + 1, self._cfg.SOLVER.MAX_EPOCH),
-        #     "iter": "{}/{}".format(cur_iter + 1, self.epoch_iters),
-        #     "time_diff": self.iter_timer.seconds(),
-        #     "eta": eta,
-        #     "verb_top1_acc": self.mb_verb_top1_acc.get_win_median(),
-        #     "verb_top5_acc": self.mb_verb_top5_acc.get_win_median(),
-        #     "noun_top1_acc": self.mb_noun_top1_acc.get_win_median(),
-        #     "noun_top5_acc": self.mb_noun_top5_acc.get_win_median(),
-        #     "top1_acc": self.mb_top1_acc.get_win_median(),
-        #     "top5_acc": self.mb_top5_acc.get_win_median(),
-        #     "verb_loss": self.loss_verb.get_win_median(),
-        #     "noun_loss": self.loss_noun.get_win_median(),
-        #     "loss": self.loss.get_win_median(),
-        #     "lr": self.lr,
-        #     "mem": int(np.ceil(mem_usage)),
-        # }
-        # logging.log_json_stats(stats)
-
         verb_top1_acc = self.num_verb_top1_cor / self.num_samples
         verb_top5_acc = self.num_verb_top5_cor / self.num_samples
         noun_top1_acc = self.num_noun_top1_cor / self.num_samples
@@ -1158,3 +1478,7 @@ class EPICTestMeter(object):
         return (self.verb_video_preds.numpy().copy(), self.noun_video_preds.numpy().copy()), \
                (self.verb_video_labels.numpy().copy(), self.noun_video_labels.numpy().copy()), \
                self.metadata.copy()
+
+
+
+
