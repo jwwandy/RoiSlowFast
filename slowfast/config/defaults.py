@@ -75,6 +75,7 @@ _C.TRAIN.EVAL_PERIOD = 1
 
 # Save model checkpoint every checkpoint period epochs.
 _C.TRAIN.CHECKPOINT_PERIOD = 1
+_C.TRAIN.ITER_CHECKPOINT_PERIOD = 200
 
 # Resume training from the latest checkpoint in the output directory.
 _C.TRAIN.AUTO_RESUME = True
@@ -121,6 +122,11 @@ _C.TEST.NUM_SPATIAL_CROPS = 3
 
 # Checkpoint types include `caffe2` or `pytorch`.
 _C.TEST.CHECKPOINT_TYPE = "pytorch"
+
+_C.TEST.EXTRACT_MSTCN_FEATURES = False
+_C.TEST.EXTRACT_FEATURES = False
+_C.TEST.EXTRACT_FEATURES_PATH = ""
+_C.TEST.EXTRACT_FEATURES_MODE = "test"
 
 
 # -----------------------------------------------------------------------------
@@ -332,6 +338,8 @@ _C.SOLVER.OPTIMIZING_METHOD = "sgd"
 # Misc options
 # ---------------------------------------------------------------------------- #
 
+_C.ENABLE_WANDB = False
+
 # Number of GPUs to use (applies to both training and testing).
 _C.NUM_GPUS = 1
 
@@ -350,6 +358,7 @@ _C.RNG_SEED = 1
 
 # Log period in iters.
 _C.LOG_PERIOD = 10
+_C.ACC_LOG_PERIOD_RATIO = 4
 
 # Distributed backend.
 _C.DIST_BACKEND = "nccl"
@@ -499,7 +508,10 @@ _C.EPICKITCHENS.BBOX_ANNOTATIONS_DIR = ""
 _C.EPICKITCHENS.FREEZE_BACKBONE = True
 _C.EPICKITCHENS.LOAD_SLOWFAST_PRETRAIN = False
 _C.EPICKITCHENS.SLOWFAST_PRETRAIN_CHECKPOINT_FILE_PATH = ""
+_C.EPICKITCHENS.FEATURE_VID = ""
 
+
+_C.EPICKITCHENS.ROI_BRANCH = 0
 
 def _assert_and_infer_cfg(cfg):
     # BN assertions.

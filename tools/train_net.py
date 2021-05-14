@@ -22,7 +22,7 @@ from slowfast.utils.meters import AVAMeter, TrainMeter, ValMeter, EPICTrainMeter
 from train_epoch import train_epoch
 from val_epoch import eval_epoch
 from test_net import test_from_train
-
+import wandb
 from slowfast.models.video_model_builder import SlowFast
 
 logger = logging.get_logger(__name__)
@@ -72,13 +72,18 @@ def train(cfg):
 
     # Setup logging format.
     logging.setup_logging()
+    if du.is_master_proc():
+        if cfg.ENABLE_WANDB:
+            wandb.login()
+            wandb.init(project='bbox', entity='slowfast')
 
     # Print config.
-    logger.info("Train with config:")
-    logger.info(pprint.pformat(cfg))
+    # logger.info("Train with config:")
+    # logger.info(pprint.pformat(cfg))
 
     # Build the video model and print model statistics.
     model = build_model(cfg)
+    
     if cfg.EPICKITCHENS.USE_BBOX and not cu.has_checkpoint(cfg.OUTPUT_DIR):
         slow_fast_model = SlowFast(cfg)
         if cfg.EPICKITCHENS.USE_BBOX and cfg.EPICKITCHENS.LOAD_SLOWFAST_PRETRAIN:
@@ -86,16 +91,17 @@ def train(cfg):
                 _ = cu.load_checkpoint(
                     cfg.EPICKITCHENS.SLOWFAST_PRETRAIN_CHECKPOINT_FILE_PATH,
                     slow_fast_model,
-                    cfg.NUM_GPUS > 1,
+                    False,
                     optimizer=None,
                     inflation=cfg.TRAIN.CHECKPOINT_INFLATE,
                     convert_from_caffe2=False,
                 )
         # cfg.TRAIN.CHECKPOINT_TYPE == "caffe2"
         logger.info("Load from slowfast.")
-        model.load_weight_slowfast(slow_fast_model)
-        # model.load_weight_slowfast()
-
+        if cfg.NUM_GPUS > 1:
+            model.module.load_weight_slowfast(slow_fast_model)
+        else:
+            model.load_weight_slowfast(slow_fast_model)
     # if du.is_master_proc():
     #     misc.log_model_info(model, cfg, is_train=True)
 
@@ -165,6 +171,8 @@ def train(cfg):
     logger.info("Start epoch: {}".format(start_epoch + 1))
 
     cnt = 0
+    # eval_epoch(val_loader, model, val_meter, 0, cfg, cnt)
+    # test_from_train(model, cfg, cnt=cnt)
     for cur_epoch in range(start_epoch, cfg.SOLVER.MAX_EPOCH):
         # Shuffle the dataset.
         loader.shuffle_dataset(train_loader, cur_epoch)

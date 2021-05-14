@@ -14,6 +14,7 @@ from slowfast.config.defaults import get_cfg
 
 from test_net import test
 from train_net import train
+import wandb
 
 def parse_args():
     """

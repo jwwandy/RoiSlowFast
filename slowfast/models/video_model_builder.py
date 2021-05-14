@@ -132,39 +132,53 @@ class SlowFastBbox(nn.Module):
     def __init__(self, cfg):
         super(SlowFastBbox, self).__init__()
         self.cfg = cfg
-        self.enable_detection = cfg.DETECTION.ENABLE
         self.num_pathways = 2
         self.slow_fast = SlowFast(cfg)
+        self.slow_fast.head = nn.Identity()
         pool_size = _POOL1[cfg.MODEL.ARCH] 
-        model_pool_size=[[
-                        cfg.DATA.NUM_FRAMES
-                        // cfg.SLOWFAST.ALPHA
-                        // pool_size[0][0],
-                        cfg.DATA.CROP_SIZE // 32 // pool_size[0][1],
-                        cfg.DATA.CROP_SIZE // 32 // pool_size[0][2],
-                    ],
-                    [
-                        cfg.DATA.NUM_FRAMES // pool_size[1][0],
-                        1,
-                        1,
-                    ],
-                ]
-        extra_fast_pool_size=[
-            cfg.DATA.NUM_FRAMES // pool_size[1][0],
-            cfg.DATA.CROP_SIZE // 32 // pool_size[1][1],
-            cfg.DATA.CROP_SIZE // 32 // pool_size[1][2],
-        ]
+        slow_pool_size = [[
+                            cfg.DATA.NUM_FRAMES
+                            // cfg.SLOWFAST.ALPHA
+                            // pool_size[0][0],
+                            cfg.DATA.CROP_SIZE // 32 // pool_size[0][1],
+                            cfg.DATA.CROP_SIZE // 32 // pool_size[0][2],
+                        ],
+                        [
+                            cfg.DATA.NUM_FRAMES
+                            // cfg.SLOWFAST.ALPHA
+                            // pool_size[0][0],
+                            1,
+                            1,
+                        ],
+                    ]
+        fast_pool_size = [[
+                            cfg.DATA.NUM_FRAMES // pool_size[1][0],
+                            cfg.DATA.CROP_SIZE // 32 // pool_size[1][1],
+                            cfg.DATA.CROP_SIZE // 32 // pool_size[1][2],
+                        ],
+                        [
+                            cfg.DATA.NUM_FRAMES // pool_size[1][0],
+                            1,
+                            1,
+                        ],
+                    ]
+        model_pool_size = [slow_pool_size, fast_pool_size]
+        if cfg.EPICKITCHENS.ROI_BRANCH == 1:
+            roi_type = [[0],[1]]
+        elif cfg.EPICKITCHENS.ROI_BRANCH == 0:
+            roi_type = [[1],[0]]
+        elif cfg.EPICKITCHENS.ROI_BRANCH == 2:
+            roi_type = [[0,1],[1]]
+        
+        dim_in = [cfg.RESNET.WIDTH_PER_GROUP * 32] * len(roi_type[0]) + [cfg.RESNET.WIDTH_PER_GROUP * 32 // cfg.SLOWFAST.BETA_INV] * len(roi_type[1])
+        
         self.bbox_head = head_helper.ResNetBboxClassifierHead(
-            dim_in=[
-                cfg.RESNET.WIDTH_PER_GROUP * 32,
-                cfg.RESNET.WIDTH_PER_GROUP * 32 // cfg.SLOWFAST.BETA_INV,
-                # cfg.RESNET.WIDTH_PER_GROUP * 32 // cfg.SLOWFAST.BETA_INV,
-            ],
+            dim_in=dim_in,
             num_classes=cfg.MODEL.NUM_CLASSES, 
             pool_size=model_pool_size,
+            roi_type=roi_type,
             resolution=[[cfg.DETECTION.ROI_XFORM_RESOLUTION] * 2] * 2, 
             scale_factor=[cfg.DATA.CROP_SIZE // cfg.DETECTION.ROI_XFORM_RESOLUTION] * 2,
-            extra_fast_pool_size = None,
             act_func="softmax",
             aligned=cfg.DETECTION.ALIGNED,
         )
@@ -183,7 +197,8 @@ class SlowFastBbox(nn.Module):
 
         slow_fast_model.head = nn.Identity()
         self.slow_fast = slow_fast_model 
-        self.slow_fast = self.slow_fast.cuda()
+        cur_device = torch.cuda.current_device()
+        self.slow_fast = self.slow_fast.cuda(device=cur_device)
         # print(self.slow_fast)
 
     def forward(self, x, bboxes=None, masks=None):
@@ -231,6 +246,8 @@ class SlowFast(nn.Module):
                 comments of the config file.
         """
         super(SlowFast, self).__init__()
+        self.extract_mstcn_features = cfg.TEST.EXTRACT_MSTCN_FEATURES
+        self.extract_features = cfg.TEST.EXTRACT_FEATURES
         self.enable_detection = cfg.DETECTION.ENABLE
         self.num_pathways = 2
         self._construct_network(cfg)
@@ -444,6 +461,7 @@ class SlowFast(nn.Module):
                     ],
                 ],
                 dropout_rate=cfg.MODEL.DROPOUT_RATE,
+                feature_extraction=self.extract_features and self.extract_mstcn_features,
             )
 
     def forward(self, x, bboxes=None):
@@ -459,11 +477,20 @@ class SlowFast(nn.Module):
         x = self.s4(x)
         x = self.s4_fuse(x)
         x = self.s5(x)
+        if not self.extract_mstcn_features and self.extract_features:
+            xs = []
+            for pathway in range(self.num_pathways):
+                xs.append(x[pathway].clone().detach())
+
         if self.enable_detection:
             x = self.head(x, bboxes)
         else:
             x = self.head(x)
-        return x
+        
+        if not self.extract_mstcn_features and self.extract_features:
+            return x, xs
+        else:
+            return x
 
     def freeze_fn(self, freeze_mode):
 

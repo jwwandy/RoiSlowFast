@@ -1,15 +1,16 @@
 TRAIN:
-  ENABLE: True
+  ENABLE: False
   DATASET: epickitchens
-  BATCH_SIZE: 32
+  BATCH_SIZE: 8
   EVAL_PERIOD: 3
   CHECKPOINT_PERIOD: 1
   CHECKPOINT_TYPE: pytorch
   AUTO_RESUME: True
   FINETUNE: True
+  CHECKPOINT_FILE_PATH: '/raid/xiaoyuz1/EPIC/SlowFast.pyth'
 DATA:
   NUM_FRAMES: 32
-  SAMPLING_RATE: 2
+  SAMPLING_RATE: 1
   TRAIN_JITTER_SCALES: [256, 320]
   TRAIN_CROP_SIZE: 224
   TEST_CROP_SIZE: 256
@@ -40,11 +41,11 @@ BN:
   MOMENTUM: 0.1
   WEIGHT_DECAY: 0.0
 SOLVER:
-  BASE_LR: 0.0001
+  BASE_LR: 0.01
   LR_POLICY: steps_with_relative_lrs
   STEPS: [0, 20, 25]
   LRS: [1, 0.1, 0.01]
-  MAX_EPOCH: 50
+  MAX_EPOCH: 10
   MOMENTUM: 0.9
   WEIGHT_DECAY: 1e-4
   WARMUP_EPOCHS: 1
@@ -53,35 +54,32 @@ SOLVER:
 MODEL:
   NUM_CLASSES: [97, 300]
   ARCH: slowfast
-  MODEL_NAME: SlowFastBbox
+  MODEL_NAME: SlowFast
   LOSS_FUNC: cross_entropy
   DROPOUT_RATE: 0.5
 TEST:
-  ENABLE: False
+  ENABLE: True
   DATASET: epickitchens
-  BATCH_SIZE: 32
+  BATCH_SIZE: 4
   NUM_SPATIAL_CROPS: 1
-  NUM_ENSEMBLE_VIEWS: 8
+  NUM_ENSEMBLE_VIEWS: 1
   CHECKPOINT_FILE_PATH: '/raid/xiaoyuz1/EPIC/SlowFast.pyth'
+  EXTRACT_FEATURES: True
+  EXTRACT_MSTCN_FEATURES: True
+  EXTRACT_FEATURES_PATH: '/raid/xiaoyuz1/EPIC/SlowFastFeatures'
 DATA_LOADER:
   NUM_WORKERS: 0
   PIN_MEMORY: True
 EPICKITCHENS:
   TRAIN_PLUS_VAL: False
+  USE_BBOX: False
   VISUAL_DATA_DIR: '/raid/xiaoyuz1/EPIC/EPIC-KITCHENS' 
-  ANNOTATIONS_DIR: '/raid/xiaoyuz1/EPIC/epic-annotations' 
-  BBOX_ANNOTATIONS_DIR: '/raid/xiaoyuz1/EPIC/epic-bbox-annotations/all_filled_in' 
-  TEST_LIST: 'annotations_slowfast_val2.pkl' 
-  TRAIN_LIST : 'annotations_slowfast_train2.pkl'
-  VAL_LIST : 'annotations_slowfast_val2.pkl'
-  USE_BBOX: True
-  FREEZE_BACKBONE: False
-  LOAD_SLOWFAST_PRETRAIN: True
-  SLOWFAST_PRETRAIN_CHECKPOINT_FILE_PATH: '/raid/xiaoyuz1/EPIC/SlowFast.pyth'
-NUM_GPUS: 4
+  ANNOTATIONS_DIR: '/raid/xiaoyuz1/EPIC/epic-annotations-feature-extraction' 
+  TEST_LIST: 'annotations_train_P02_01.pkl' 
+  TRAIN_LIST : 'annotations_train_P02_01.pkl'
+  VAL_LIST : 'annotations_train_P02_01.pkl'
+NUM_GPUS: 3
 NUM_SHARDS: 1
 RNG_SEED: 0
-LOG_PERIOD: 30
-ACC_LOG_PERIOD_RATIO: 1
-OUTPUT_DIR: '/raid/xiaoyuz1/EPIC/slowfast_experiment/test_5_12'
-ENABLE_WANDB: False
+LOG_PERIOD: 5
+OUTPUT_DIR: '/raid/xiaoyuz1/EPIC/slowfast_experiment/feature_extraction_test'

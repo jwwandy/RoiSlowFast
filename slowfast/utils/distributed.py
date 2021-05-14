@@ -31,6 +31,7 @@ def all_gather(tensors):
         ]
         dist.all_gather(tensor_placeholder, tensor, async_op=False)
         gather_list.append(tensor_placeholder)
+        # print(torch.cat(tensor_placeholder, dim=0).shape)
     for gathered_tensor in gather_list:
         output_tensor.append(torch.cat(gathered_tensor, dim=0))
     return output_tensor

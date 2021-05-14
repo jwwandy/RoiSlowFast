@@ -14,11 +14,9 @@ import slowfast.utils.metrics as metrics
 import slowfast.utils.misc as misc
 from slowfast.datasets import loader
 from slowfast.models import build_model
-# from slowfast.utils.meters import AVAMeter, TrainMeter, ValMeter, EPICTrainMeter, EPICValMeter
+from slowfast.utils.meters import AVAMeter, TrainMeter, ValMeter, EPICTrainMeter, EPICValMeter
 
 logger = logging.get_logger(__name__)
-
-
 
 def train_epoch(train_loader, model, optimizer, train_meter, cur_epoch, cfg, cnt):
     """
@@ -38,14 +36,13 @@ def train_epoch(train_loader, model, optimizer, train_meter, cur_epoch, cfg, cnt
     if cfg.BN.FREEZE:
         model.freeze_fn('bn_statistics')
 
-    # train_meter.iter_tic()
+    train_meter.iter_tic()
     data_size = len(train_loader)
 
     logger.info("Train loader size: {}".format(data_size))
 
     #for cur_iter, (inputs, bboxs, masks, labels, _, meta) in enumerate(train_loader):
     for cur_iter, output_dict in enumerate(train_loader):
-
         if cfg.EPICKITCHENS.USE_BBOX:
             inputs = output_dict['inputs']
             bboxs = output_dict['bboxs']
@@ -69,18 +66,6 @@ def train_epoch(train_loader, model, optimizer, train_meter, cur_epoch, cfg, cnt
             labels = {k: v.cuda() for k, v in labels.items()}
         else:
             labels = labels.cuda()
-        
-        if cur_iter == 0:
-            log_preds = []
-            log_labels = []
-            log_loss = []            
-            if isinstance(inputs, (list,)):
-                for i in range(len(inputs)):
-                    log_preds.append([])
-                    log_labels.append([])
-                for i in range(len(inputs)+1):
-                    log_loss.append([]) 
-
         # for key, val in meta.items():
         #     if isinstance(val, (list,)):
         #         for i in range(len(val)):
@@ -99,8 +84,14 @@ def train_epoch(train_loader, model, optimizer, train_meter, cur_epoch, cfg, cnt
         else:
             # Perform the forward pass.
             if cfg.EPICKITCHENS.USE_BBOX:
-                bboxs = bboxs.cuda()
-                masks = masks.cuda()
+                if isinstance(bboxs, (list,)):
+                    for i in range(len(bboxs)):
+                        bboxs[i] = bboxs[i].cuda(non_blocking=True)
+                        masks[i] = masks[i].cuda(non_blocking=True)
+                else:
+                    bboxs = bboxs.cuda(non_blocking=True)
+                    masks = masks.cuda(non_blocking=True)
+                
                 preds = model(inputs, bboxes=bboxs, masks=masks)
             else:
                 preds = model(inputs)
@@ -114,167 +105,120 @@ def train_epoch(train_loader, model, optimizer, train_meter, cur_epoch, cfg, cnt
             loss = 0.5 * (loss_verb + loss_noun)
             # check Nan Loss.
             misc.check_nan_losses(loss)
-            log_loss[0].append(loss_verb.item())
-            log_loss[1].append(loss_noun.item())
-            log_loss[2].append(loss.item())
         else:
             # Explicitly declare reduction to mean.
             loss_fun = losses.get_loss_func(cfg.MODEL.LOSS_FUNC)(reduction="mean")
             # Compute the loss.
             loss = loss_fun(preds, labels)
             # check Nan Loss.
-            misc.check_nan_losses(loss.item())
-            log_loss.append(loss)
+            misc.check_nan_losses(loss)
 
         # Perform the backward pass.
         optimizer.zero_grad()
         loss.backward()
         # Update the parameters.
         optimizer.step()
-        
-        # Add prediction and labels into list
-        # Only log loss for DETECTION.ENABLE conditions
-        if not cfg.DETECTION.ENABLE:
+
+        if cfg.DETECTION.ENABLE:
+            if cfg.NUM_GPUS > 1:
+                loss = du.all_reduce([loss])[0]
+            loss = loss.item()
+
+            train_meter.iter_toc()
+            # Update and log stats.
+            train_meter.update_stats(None, None, None, loss, lr)
+        else:
             if isinstance(labels, (dict,)):
-                # Store prediciton and labels in an epoch
-                if cfg.NUM_GPUS > 1:
-                    preds_v, preds_n, label_v, label_n = du.all_reduce(
-                        [preds[0], preds[1], labels['verb'], labels['noun']]
-                    )
-                else:
-                    preds_v, preds_n, label_v, label_n = preds[0], preds[1], labels['verb'], labels['noun']
-                log_preds[0].append(preds_v)
-                log_preds[1].append(preds_n)
-                log_labels[0].append(label_v)
-                log_labels[1].append(label_n)
-            else:
-                if cfg.NUM_GPUS > 1:
-                    preds, labels = du.all_reduce(
-                        [preds, labels]
-                    )
-
-                log_preds.append(preds)
-                log_labels.append(labels)
-        
-        # train_meter.iter_toc()
-
-        # Aggegrate LOG_ITR * BATCH_SIZE number of samples then compute metrics
-        if cur_iter > 0 and cur_iter % cfg.LOG_PERIOD == 0:
-            if cfg.DETECTION.ENABLE:
-                mean_loss = np.mean(log_loss)
-                train_meter.update_stats(None, None, None, mean_loss, lr)
-            else:
-                all_preds = []
-                all_labels = []
-                # Aggregate into a list
-                if len(log_preds) > 1: # Has 'verb', 'noun' output, assume 2
-                    all_preds.append(torch.stack(log_preds[0], dim=0).view(-1, cfg.MODEL.NUM_CLASSES[0]))
-                    all_labels.append(torch.stack(log_labels[0], dim=0).view(-1))
-
-                    all_preds.append(torch.stack(log_preds[1], dim=0).view(-1, cfg.MODEL.NUM_CLASSES[1]))
-                    all_labels.append(torch.stack(log_labels[1], dim=0).view(-1))
-                else:
-                    all_preds.append(torch.stack(log_preds, dim=0).view(-1, cfg.MODEL.NUM_CLASSES[0]))
-                    all_labels.append(torch.stack(log_labels, dim=0).view(-1))    
+                # Compute the verb accuracies.
+                verb_top1_acc, verb_top5_acc = metrics.topk_accuracies(preds[0], labels['verb'], (1, 5))
                 
-                if len(all_preds) > 1:
-                    loss_verb = np.mean(log_loss[0])
-                    loss_noun = np.mean(log_loss[1])
-                    loss = np.mean(log_loss[2])
-                    # Compute the verb accuracies.
-                    # verb_top1_acc, verb_top5_acc = metrics.topk_accuracies(preds[0], labels['verb'], (1, 5))
-                    verb_top1_acc, verb_top5_acc = metrics.topk_accuracies(all_preds[0], all_labels[0], (1, 5))
+                # predicted_answer_softmax = torch.nn.Softmax(dim=1)(preds[0])
+                # predicted_answer_max = torch.max(predicted_answer_softmax.data, 1).indices
+                # print(cnt, predicted_answer_max, labels['verb'])
 
-                    predicted_answer_softmax = torch.nn.Softmax(dim=1)(preds[0])
-                    predicted_answer_max = torch.max(predicted_answer_softmax.data, 1).indices
-                    # print(cnt, predicted_answer_max, labels['verb'])
-
-                    # Gather all the predictions across all the devices.
-                    if cfg.NUM_GPUS > 1:
-                        loss_verb, verb_top1_acc, verb_top5_acc = du.all_reduce(
-                            [loss_verb, verb_top1_acc, verb_top5_acc]
-                        )
-
-                    # Copy the stats from GPU to CPU (sync point).
-                    loss_verb, verb_top1_acc, verb_top5_acc = (
-                        loss_verb.item(),
-                        verb_top1_acc.item(),
-                        verb_top5_acc.item(),
-                    )
-                    log_loss.append(loss.item())
-
-                    # Compute the noun accuracies.
-                    noun_top1_acc, noun_top5_acc = metrics.topk_accuracies(all_preds[1], all_labels[1], (1, 5))
-
-                    # Gather all the predictions across all the devices.
-                    if cfg.NUM_GPUS > 1:
-                        loss_noun, noun_top1_acc, noun_top5_acc = du.all_reduce(
-                            [loss_noun, noun_top1_acc, noun_top5_acc]
-                        )
-
-                    # Copy the stats from GPU to CPU (sync point).
-                    loss_noun, noun_top1_acc, noun_top5_acc = (
-                        loss_noun.item(),
-                        noun_top1_acc.item(),
-                        noun_top5_acc.item(),
+                # Gather all the predictions across all the devices.
+                if cfg.NUM_GPUS > 1:
+                    loss_verb, verb_top1_acc, verb_top5_acc = du.all_reduce(
+                        [loss_verb, verb_top1_acc, verb_top5_acc]
                     )
 
-                    # Compute the action accuracies.
-                    action_top1_acc, action_top5_acc = metrics.multitask_topk_accuracies((all_preds[0], all_preds[1]),
-                                                                                        (all_labels[0], all_labels[1]),
-                                                                                        (1, 5))
-                    # Gather all the predictions across all the devices.
-                    if cfg.NUM_GPUS > 1:
-                        loss, action_top1_acc, action_top5_acc = du.all_reduce(
-                            [loss, action_top1_acc, action_top5_acc]
-                        )
+                # Copy the stats from GPU to CPU (sync point).
+                loss_verb, verb_top1_acc, verb_top5_acc = (
+                    loss_verb.item(),
+                    verb_top1_acc.item(),
+                    verb_top5_acc.item(),
+                )
 
-                    # Copy the stats from GPU to CPU (sync point).
-                    loss, action_top1_acc, action_top5_acc = (
-                        loss.item(),
-                        action_top1_acc.item(),
-                        action_top5_acc.item(),
+                # Compute the noun accuracies.
+                noun_top1_acc, noun_top5_acc = metrics.topk_accuracies(preds[1], labels['noun'], (1, 5))
+
+                # Gather all the predictions across all the devices.
+                if cfg.NUM_GPUS > 1:
+                    loss_noun, noun_top1_acc, noun_top5_acc = du.all_reduce(
+                        [loss_noun, noun_top1_acc, noun_top5_acc]
                     )
 
-                    # train_meter.iter_toc()
-                    # Update and log stats.
-                    train_meter.update_stats(
-                        (verb_top1_acc, noun_top1_acc, action_top1_acc),
-                        (verb_top5_acc, noun_top5_acc, action_top5_acc),
-                        (loss_verb, loss_noun, loss),
-                        lr, inputs[0].size(0) * cfg.NUM_GPUS
-                    )
-                else:
-                    # Compute the errors.
-                    loss = np.mean(log_loss)
-                    num_topks_correct = metrics.topks_correct(all_preds, all_labels, (1, 5))
-                    top1_err, top5_err = [
-                        (1.0 - x / preds.size(0)) * 100.0 for x in num_topks_correct
-                    ]
+                # Copy the stats from GPU to CPU (sync point).
+                loss_noun, noun_top1_acc, noun_top5_acc = (
+                    loss_noun.item(),
+                    noun_top1_acc.item(),
+                    noun_top5_acc.item(),
+                )
 
-                    # Gather all the predictions across all the devices.
-                    if cfg.NUM_GPUS > 1:
-                        loss, top1_err, top5_err = du.all_reduce(
-                            [loss, top1_err, top5_err]
-                        )
-
-                    # Copy the stats from GPU to CPU (sync point).
-                    loss, top1_err, top5_err = (
-                        loss.item(),
-                        top1_err.item(),
-                        top5_err.item(),
+                # Compute the action accuracies.
+                action_top1_acc, action_top5_acc = metrics.multitask_topk_accuracies((preds[0], preds[1]),
+                                                                                     (labels['verb'], labels['noun']),
+                                                                                     (1, 5))
+                # Gather all the predictions across all the devices.
+                if cfg.NUM_GPUS > 1:
+                    loss, action_top1_acc, action_top5_acc = du.all_reduce(
+                        [loss, action_top1_acc, action_top5_acc]
                     )
 
-                    # train_meter.iter_toc()
-                    # Update and log stats.
-                    train_meter.update_stats(
-                        top1_err, top5_err, loss, lr, inputs[0].size(0) * cfg.NUM_GPUS
+                # Copy the stats from GPU to CPU (sync point).
+                loss, action_top1_acc, action_top5_acc = (
+                    loss.item(),
+                    action_top1_acc.item(),
+                    action_top5_acc.item(),
+                )
+
+                train_meter.iter_toc()
+                # Update and log stats.
+                train_meter.update_stats(
+                    (verb_top1_acc, noun_top1_acc, action_top1_acc),
+                    (verb_top5_acc, noun_top5_acc, action_top5_acc),
+                    (loss_verb, loss_noun, loss),
+                    lr, inputs[0].size(0) * cfg.NUM_GPUS
+                )
+            else:
+                # Compute the errors.
+                num_topks_correct = metrics.topks_correct(preds, labels, (1, 5))
+                top1_err, top5_err = [
+                    (1.0 - x / preds.size(0)) * 100.0 for x in num_topks_correct
+                ]
+
+                # Gather all the predictions across all the devices.
+                if cfg.NUM_GPUS > 1:
+                    loss, top1_err, top5_err = du.all_reduce(
+                        [loss, top1_err, top5_err]
                     )
-            train_meter.log_iter_stats(cur_epoch, cur_iter, cnt)
-            cnt += 1
-        # train_meter.iter_tic()
+
+                # Copy the stats from GPU to CPU (sync point).
+                loss, top1_err, top5_err = (
+                    loss.item(),
+                    top1_err.item(),
+                    top5_err.item(),
+                )
+
+                train_meter.iter_toc()
+                # Update and log stats.
+                train_meter.update_stats(
+                    top1_err, top5_err, loss, lr, inputs[0].size(0) * cfg.NUM_GPUS
+                )
+        train_meter.log_iter_stats(cur_epoch, cur_iter, cnt)
+        train_meter.iter_tic()
+        cnt += 1
     # Log epoch stats.
-    print("\n")
     train_meter.log_epoch_stats(cur_epoch)
     train_meter.reset()
     return cnt

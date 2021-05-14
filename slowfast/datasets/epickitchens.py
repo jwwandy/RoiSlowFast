@@ -7,7 +7,7 @@ import torch.utils.data
 import slowfast.utils.logging as logging
 
 from .build import DATASET_REGISTRY
-from .epickitchens_record import EpicKitchensVideoRecord
+from .epickitchens_record import EpicKitchensVideoRecord, EpicKitchensVideoFeatureExtractionRecord
 from .epickitchens_bbox import load_precomputed_bbox, refine_mask_by_filter_out_zero_mask
 
 from . import transform as transform
@@ -37,11 +37,14 @@ class Epickitchens(torch.utils.data.Dataset):
         # the frames.
         if self.mode in ["train", "val", "train+val"]:
             self._num_clips = 1
+            self.mod_ratio = cfg.TRAIN.BATCH_SIZE if cfg.NUM_GPUS > 1 else 1
+        
         elif self.mode in ["test"]:
             self._num_clips = (
                     cfg.TEST.NUM_ENSEMBLE_VIEWS * cfg.TEST.NUM_SPATIAL_CROPS
             )
             self.emsemble_views = cfg.TEST.NUM_ENSEMBLE_VIEWS
+            self.mod_ratio = cfg.TEST.BATCH_SIZE if cfg.NUM_GPUS > 1 else 1
 
         logger.info("Constructing EPIC-KITCHENS {}...".format(mode))
         self._construct_loader()
@@ -50,8 +53,6 @@ class Epickitchens(torch.utils.data.Dataset):
         """
         Construct the video loader.
         """
-        print("Mode: ", self.mode)
-        print("Val List: ", self.cfg.EPICKITCHENS.VAL_LIST)
         if self.mode == "train":
             path_annotations_pickle = [os.path.join(self.cfg.EPICKITCHENS.ANNOTATIONS_DIR, self.cfg.EPICKITCHENS.TRAIN_LIST)]
         elif self.mode == "val":
@@ -71,19 +72,44 @@ class Epickitchens(torch.utils.data.Dataset):
         self._video_records = []
         self._spatial_temporal_idx = []
         for file in path_annotations_pickle:
-            for tup in pd.read_pickle(file).iterrows():
-                tup_record = EpicKitchensVideoRecord(tup)
+            df = pd.read_pickle(file)
+            cut_remain = (len(df)*self._num_clips) % self.mod_ratio #self.cfg.NUM_GPUS
+            if cut_remain != 0:
+                row_to_pad = np.random.choice(len(df), self.mod_ratio-cut_remain)
+            else:
+                row_to_pad = np.array([])
+            print(self.mod_ratio, cut_remain, row_to_pad, (len(df)*self._num_clips))
+
+            for tup in df.iterrows():
+                if self.cfg.TEST.EXTRACT_FEATURES and (self.cfg.TEST.EXTRACT_MSTCN_FEATURES):
+                    tup_record = EpicKitchensVideoFeatureExtractionRecord(tup)
+                else:
+                    tup_record = EpicKitchensVideoRecord(tup)
                 self.video_ids.add(tup_record.untrimmed_video_name)
-                if not (tup_record.num_frames >= self.cfg.EPICKITCHENS.SEGMENT_MIN_LENGTH or \
-                    tup_record.num_frames <= self.cfg.EPICKITCHENS.SEGMENT_MAX_LENGTH):
-                    continue
+                # if not (tup_record.num_frames >= self.cfg.EPICKITCHENS.SEGMENT_MIN_LENGTH or \
+                #     tup_record.num_frames <= self.cfg.EPICKITCHENS.SEGMENT_MAX_LENGTH):
+                #     continue
                 for idx in range(self._num_clips):
                     self._video_records.append(tup_record)
                     self._spatial_temporal_idx.append(idx)
+            
+            for row_idx in row_to_pad:
+                tup1 = df.iloc[row_idx]
+                tup = (tup1.name, tup1)
+                if self.cfg.TEST.EXTRACT_FEATURES and (self.cfg.TEST.EXTRACT_MSTCN_FEATURES):
+                    tup_record = EpicKitchensVideoFeatureExtractionRecord(tup)
+                else:
+                    tup_record = EpicKitchensVideoRecord(tup)
+                self._video_records.append(tup_record)
+                self._spatial_temporal_idx.append(0)
         
-        self.video_ids = list(self.video_ids)
-        self.bboxs_dict, self.mask_dict = load_precomputed_bbox(self.cfg, self.video_ids)
         
+        
+        
+        if self.cfg.EPICKITCHENS.USE_BBOX:
+            self.video_ids = list(self.video_ids)
+            self.bboxs_dict, self.mask_dict = load_precomputed_bbox(self.cfg, self.video_ids)
+            
         assert (
                 len(self._video_records) > 0
         ), "Failed to load EPIC-KITCHENS split {} from {}".format(
@@ -204,7 +230,7 @@ class Epickitchens(torch.utils.data.Dataset):
             fast_bboxs = bboxs.copy()
             fast_mask = mask.copy()
             
-            if self.cfg.MODEL.ARCH in self.cfg.MODEL.SINGLE_PATHWAY_ARCH:
+            if self.cfg.EPICKITCHENS.ROI_BRANCH == 1:
                 all_bboxs = [torch.FloatTensor(fast_bboxs)]
                 all_masks = [torch.FloatTensor(fast_mask)]
             else:
@@ -215,8 +241,14 @@ class Epickitchens(torch.utils.data.Dataset):
                 slow_mask = mask.copy()
                 slow_mask = slow_mask[select_slow_idx]
 
-                all_bboxs = [torch.FloatTensor(slow_bboxs), torch.FloatTensor(fast_bboxs)]
-                all_masks = [torch.FloatTensor(slow_mask), torch.FloatTensor(fast_mask)]
+                if self.cfg.EPICKITCHENS.ROI_BRANCH == 0:
+                    all_bboxs = [torch.FloatTensor(slow_bboxs)]
+                    all_masks = [torch.FloatTensor(slow_mask)]
+                else:
+                    all_bboxs = [torch.FloatTensor(slow_bboxs), torch.FloatTensor(fast_bboxs)]
+                    all_masks = [torch.FloatTensor(slow_mask), torch.FloatTensor(fast_mask)]
+            
+            # if self.cfg.MODEL.ARCH in self.cfg.MODEL.SINGLE_PATHWAY_ARCH:
 
             output_dict['inputs'] = frames
             output_dict['bboxs'] = all_bboxs
@@ -230,7 +262,6 @@ class Epickitchens(torch.utils.data.Dataset):
             output_dict['label'] = label
             output_dict['index'] = index
             output_dict['metadata'] = metadata
-            # return frames, label, index, metadata
         return output_dict
 
     def __len__(self):

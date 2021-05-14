@@ -1,7 +1,7 @@
 TRAIN:
-  ENABLE: True
+  ENABLE: False
   DATASET: epickitchens
-  BATCH_SIZE: 32
+  BATCH_SIZE: 8
   EVAL_PERIOD: 3
   CHECKPOINT_PERIOD: 1
   CHECKPOINT_TYPE: pytorch
@@ -57,12 +57,11 @@ MODEL:
   LOSS_FUNC: cross_entropy
   DROPOUT_RATE: 0.5
 TEST:
-  ENABLE: False
+  ENABLE: True
   DATASET: epickitchens
-  BATCH_SIZE: 32
+  BATCH_SIZE: 4
   NUM_SPATIAL_CROPS: 1
-  NUM_ENSEMBLE_VIEWS: 8
-  CHECKPOINT_FILE_PATH: '/raid/xiaoyuz1/EPIC/SlowFast.pyth'
+  NUM_ENSEMBLE_VIEWS: 5
 DATA_LOADER:
   NUM_WORKERS: 0
   PIN_MEMORY: True
@@ -70,18 +69,17 @@ EPICKITCHENS:
   TRAIN_PLUS_VAL: False
   VISUAL_DATA_DIR: '/raid/xiaoyuz1/EPIC/EPIC-KITCHENS' 
   ANNOTATIONS_DIR: '/raid/xiaoyuz1/EPIC/epic-annotations' 
-  BBOX_ANNOTATIONS_DIR: '/raid/xiaoyuz1/EPIC/epic-bbox-annotations/all_filled_in' 
-  TEST_LIST: 'annotations_slowfast_val2.pkl' 
+  BBOX_ANNOTATIONS_DIR: '/raid/xiaoyuz1/EPIC/epic-bbox-annotations/all' 
+  TEST_LIST: 'annotations_train_P14_09.pkl' 
   TRAIN_LIST : 'annotations_slowfast_train2.pkl'
   VAL_LIST : 'annotations_slowfast_val2.pkl'
   USE_BBOX: True
   FREEZE_BACKBONE: False
   LOAD_SLOWFAST_PRETRAIN: True
   SLOWFAST_PRETRAIN_CHECKPOINT_FILE_PATH: '/raid/xiaoyuz1/EPIC/SlowFast.pyth'
-NUM_GPUS: 4
+NUM_GPUS: 1
 NUM_SHARDS: 1
 RNG_SEED: 0
 LOG_PERIOD: 30
 ACC_LOG_PERIOD_RATIO: 1
-OUTPUT_DIR: '/raid/xiaoyuz1/EPIC/slowfast_experiment/test_5_12'
-ENABLE_WANDB: False
+OUTPUT_DIR: '/raid/xiaoyuz1/EPIC/slowfast_experiment/all_1'

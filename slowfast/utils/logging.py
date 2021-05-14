@@ -64,4 +64,4 @@ def log_json_stats(stats):
     }
     json_stats = simplejson.dumps(stats, sort_keys=True, use_decimal=True)
     logger = get_logger(__name__)
-    logger.info("\n\njson_stats: {:s}".format(json_stats))
+    logger.info("json_stats: {:s}".format(json_stats))
