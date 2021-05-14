@@ -22,7 +22,7 @@ from slowfast.utils.ava_eval_helper import (
 )
 
 import wandb
-
+import slowfast.utils.distributed as du
 logger = logging.get_logger(__name__)
 
 
@@ -649,9 +649,6 @@ class EPICTrainMeter(object):
         self.num_noun_top5_cor = 0
         self.num_samples = 0
         print("cfg.LOG_PERIOD: ", cfg.LOG_PERIOD)
-        if cfg.ENABLE_WANDB:
-            wandb.login()
-            wandb.init(project='bbox', entity='slowfast')
 
     def reset(self):
         """
@@ -784,40 +781,31 @@ class EPICTrainMeter(object):
             "lr": self.lr,
             "mem": int(np.ceil(mem_usage)),
         }
-
-        if self._cfg.ENABLE_WANDB:
-            # wandb_dict = {
-            #     "train/verb_top1_acc": self.mb_verb_top1_acc.get_win_median(),
-            #     "train/verb_top5_acc": self.mb_verb_top5_acc.get_win_median(),
-            #     "train/noun_top1_acc": self.mb_noun_top1_acc.get_win_median(),
-            #     "train/noun_top5_acc": self.mb_noun_top5_acc.get_win_median(),
-            #     "train/top1_acc": self.mb_top1_acc.get_win_median(),
-            #     "train/top5_acc": self.mb_top5_acc.get_win_median(),
-            #     "train/verb_loss": self.loss_verb.get_win_median(),
-            #     "train/noun_loss": self.loss_noun.get_win_median(),
-            #     "train/loss": self.loss.get_win_median(),
-            # }
-            wandb_dict = {
-                "train/accmulate_verb_top1_acc": self.num_verb_top1_cor / self.num_samples,
-                "train/accmulate_verb_top5_acc": self.num_verb_top5_cor / self.num_samples,
-                "train/accmulate_noun_top1_acc": self.num_noun_top1_cor / self.num_samples,
-                "train/accmulate_noun_top5_acc": self.num_noun_top5_cor / self.num_samples,
-                "train/accmulate_top1_acc": self.num_top1_cor / self.num_samples,
-                "train/accmulate_top5_acc": self.num_top5_cor / self.num_samples,
-                "train/accmulate_verb_loss": self.loss_verb_total / self.num_samples,
-                "train/accmulate_noun_loss": self.loss_noun_total / self.num_samples,
-                "train/accmulate_loss": self.loss_total / self.num_samples,
-                "train/verb_top1_acc": self.mb_verb_top1_acc.get_win_median(),
-                "train/verb_top5_acc": self.mb_verb_top5_acc.get_win_median(),
-                "train/noun_top1_acc": self.mb_noun_top1_acc.get_win_median(),
-                "train/noun_top5_acc": self.mb_noun_top5_acc.get_win_median(),
-                "train/top1_acc": self.mb_top1_acc.get_win_median(),
-                "train/top5_acc": self.mb_top5_acc.get_win_median(),
-                "train/verb_loss": self.loss_verb.get_win_median(),
-                "train/noun_loss": self.loss_noun.get_win_median(),
-                "train/loss": self.loss.get_win_median(),
-            }
-            wandb.log(wandb_dict, step=cnt)
+        logging.log_json_stats(stats)
+        if du.is_master_proc():
+            if self._cfg.ENABLE_WANDB:
+                print("Log Train")
+                wandb_dict = {
+                    "train/accmulate_verb_top1_acc": self.num_verb_top1_cor / self.num_samples,
+                    "train/accmulate_verb_top5_acc": self.num_verb_top5_cor / self.num_samples,
+                    "train/accmulate_noun_top1_acc": self.num_noun_top1_cor / self.num_samples,
+                    "train/accmulate_noun_top5_acc": self.num_noun_top5_cor / self.num_samples,
+                    "train/accmulate_top1_acc": self.num_top1_cor / self.num_samples,
+                    "train/accmulate_top5_acc": self.num_top5_cor / self.num_samples,
+                    "train/accmulate_verb_loss": self.loss_verb_total / self.num_samples,
+                    "train/accmulate_noun_loss": self.loss_noun_total / self.num_samples,
+                    "train/accmulate_loss": self.loss_total / self.num_samples,
+                    "train/verb_top1_acc": self.mb_verb_top1_acc.get_win_median(),
+                    "train/verb_top5_acc": self.mb_verb_top5_acc.get_win_median(),
+                    "train/noun_top1_acc": self.mb_noun_top1_acc.get_win_median(),
+                    "train/noun_top5_acc": self.mb_noun_top5_acc.get_win_median(),
+                    "train/top1_acc": self.mb_top1_acc.get_win_median(),
+                    "train/top5_acc": self.mb_top5_acc.get_win_median(),
+                    "train/verb_loss": self.loss_verb.get_win_median(),
+                    "train/noun_loss": self.loss_noun.get_win_median(),
+                    "train/loss": self.loss.get_win_median(),
+                }
+                wandb.log(wandb_dict, step=cnt)
 
         
 
@@ -1020,21 +1008,24 @@ class EPICValMeter(object):
         }
         logging.log_json_stats(stats)
 
-        # wandb_dict = {
-        #     "val/verb_top1_acc": verb_top1_acc,
-        #     "val/verb_top5_acc": verb_top5_acc,
-        #     "val/noun_top1_acc": noun_top1_acc,
-        #     "val/noun_top5_acc": noun_top5_acc,
-        #     "val/top1_acc": top1_acc,
-        #     "val/top5_acc": top5_acc,
-        #     "val/max_verb_top1_acc": self.max_verb_top1_acc,
-        #     "val/max_verb_top5_acc": self.max_verb_top5_acc,
-        #     "val/max_noun_top1_acc": self.max_noun_top1_acc,
-        #     "val/max_noun_top5_acc": self.max_noun_top5_acc,
-        #     "val/max_top1_acc": self.max_top1_acc,
-        #     "val/max_top5_acc": self.max_top5_acc,
-        # }
-        # wandb.log(wandb_dict, step=cnt)
+        if du.is_master_proc():
+            if self._cfg.ENABLE_WANDB:
+                print("Log Eval")
+                wandb_dict = {
+                    "val/verb_top1_acc": verb_top1_acc,
+                    "val/verb_top5_acc": verb_top5_acc,
+                    "val/noun_top1_acc": noun_top1_acc,
+                    "val/noun_top5_acc": noun_top5_acc,
+                    "val/top1_acc": top1_acc,
+                    "val/top5_acc": top5_acc,
+                    "val/max_verb_top1_acc": self.max_verb_top1_acc,
+                    "val/max_verb_top5_acc": self.max_verb_top5_acc,
+                    "val/max_noun_top1_acc": self.max_noun_top1_acc,
+                    "val/max_noun_top5_acc": self.max_noun_top5_acc,
+                    "val/max_top1_acc": self.max_top1_acc,
+                    "val/max_top5_acc": self.max_top5_acc,
+                }
+                wandb.log(wandb_dict, step=cnt)
 
         return is_best_epoch
 

@@ -134,6 +134,7 @@ class SlowFastBbox(nn.Module):
         self.cfg = cfg
         self.num_pathways = 2
         self.slow_fast = SlowFast(cfg)
+        self.slow_fast.head = nn.Identity()
         pool_size = _POOL1[cfg.MODEL.ARCH] 
         slow_pool_size = [[
                             cfg.DATA.NUM_FRAMES

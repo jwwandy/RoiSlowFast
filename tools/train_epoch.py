@@ -43,7 +43,6 @@ def train_epoch(train_loader, model, optimizer, train_meter, cur_epoch, cfg, cnt
 
     #for cur_iter, (inputs, bboxs, masks, labels, _, meta) in enumerate(train_loader):
     for cur_iter, output_dict in enumerate(train_loader):
-    
         if cfg.EPICKITCHENS.USE_BBOX:
             inputs = output_dict['inputs']
             bboxs = output_dict['bboxs']
@@ -220,7 +219,6 @@ def train_epoch(train_loader, model, optimizer, train_meter, cur_epoch, cfg, cnt
         train_meter.iter_tic()
         cnt += 1
     # Log epoch stats.
-    print("\n")
     train_meter.log_epoch_stats(cur_epoch)
     train_meter.reset()
     return cnt

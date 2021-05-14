@@ -59,9 +59,9 @@ MODEL:
 TEST:
   ENABLE: False
   DATASET: epickitchens
-  BATCH_SIZE: 4
+  BATCH_SIZE: 32
   NUM_SPATIAL_CROPS: 1
-  NUM_ENSEMBLE_VIEWS: 5
+  NUM_ENSEMBLE_VIEWS: 8
   CHECKPOINT_FILE_PATH: '/raid/xiaoyuz1/EPIC/SlowFast.pyth'
 DATA_LOADER:
   NUM_WORKERS: 0
@@ -71,9 +71,9 @@ EPICKITCHENS:
   VISUAL_DATA_DIR: '/raid/xiaoyuz1/EPIC/EPIC-KITCHENS' 
   ANNOTATIONS_DIR: '/raid/xiaoyuz1/EPIC/epic-annotations' 
   BBOX_ANNOTATIONS_DIR: '/raid/xiaoyuz1/EPIC/epic-bbox-annotations/all_filled_in' 
-  TEST_LIST: 'annotations_val_P02_12.pkl' 
-  TRAIN_LIST : 'annotations_train_P02_01.pkl'
-  VAL_LIST : 'annotations_val_P02_12.pkl'
+  TEST_LIST: 'annotations_slowfast_val2.pkl' 
+  TRAIN_LIST : 'annotations_slowfast_train2.pkl'
+  VAL_LIST : 'annotations_slowfast_val2.pkl'
   USE_BBOX: True
   FREEZE_BACKBONE: False
   LOAD_SLOWFAST_PRETRAIN: True

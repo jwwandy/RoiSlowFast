@@ -38,6 +38,6 @@ def build_model(cfg):
         # Make model replica operate on the current device
         model = torch.nn.parallel.DistributedDataParallel(
             module=model, device_ids=[cur_device], output_device=cur_device,
-            find_unused_parameters=False
+            find_unused_parameters=True
         )
     return model

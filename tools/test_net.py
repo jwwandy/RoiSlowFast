@@ -244,11 +244,12 @@ def test_from_train(model, cfg, cnt=-1):
         os.makedirs(scores_path)
     
     filename_root = cfg.EPICKITCHENS.TEST_LIST.split('.')[0]
-    if cnt > 0:
+    if cnt >= 0:
         file_name = '{}_{}_{}.pkl'.format(filename_root, cnt, cfg.MODEL.MODEL_NAME)
     else:
         file_name = '{}_{}_{}.pkl'.format(filename_root, 'test_only', cfg.MODEL.MODEL_NAME)
     file_path = os.path.join(scores_path, file_name)
+    logger.info(file_path)
 
     pickle.dump([], open(file_path, 'wb+'))
     preds, labels, metadata = perform_test(test_loader, model, test_meter, cfg)
@@ -263,8 +264,6 @@ def test_from_train(model, cfg, cnt=-1):
             scores_path = os.path.join(cfg.OUTPUT_DIR, 'scores')
             if not os.path.exists(scores_path):
                 os.makedirs(scores_path)
-            # file_name = '{}.pkl'.format(cfg.EPICKITCHENS.TEST_SPLIT)
-            # file_path = os.path.join(scores_path, file_name)
             pickle.dump(results, open(file_path, 'wb'))
 
 def test(cfg, cnt=-1):
@@ -287,7 +286,7 @@ def test(cfg, cnt=-1):
         os.makedirs(scores_path)
     
     filename_root = cfg.EPICKITCHENS.TEST_LIST.split('.')[0]
-    if cnt > 0:
+    if cnt >= 0:
         file_name = '{}_{}_{}.pkl'.format(filename_root, cnt, cfg.MODEL.MODEL_NAME)
     else:
         file_name = '{}_{}_{}.pkl'.format(filename_root, 'test_only', cfg.MODEL.MODEL_NAME)

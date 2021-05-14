@@ -33,6 +33,7 @@ def run(
             slowfast/config/defaults.py
     """
     # Initialize the process group.
+    # print(local_rank, num_proc, shard_id, num_shards)
     world_size = num_proc * num_shards
     rank = shard_id * num_proc + local_rank
 
