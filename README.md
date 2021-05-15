@@ -1,17 +1,7 @@
-# SlowFast Networks for Action Recognition on EPIC-KITCHENS-100
+# EPIC-KITCHENS-100 SlowFast Networks with ROI
 
-The code in this repo is a clone from [https://github.com/facebookresearch/SlowFast](https://github.com/facebookresearch/SlowFast) and adapted to train on the EPIC-KITCHENS-100 dataset. Particularly:
-
-- We added a dataloader for EPIC-KITCHENS-100
-- We added a training configuration file for EPIC-KITCHENS-100
-- We adapted the code to train on verb+noun as multi-task learning
-
-All the code to support EPIC-KITCHENS-100 is written by [Evangelos Kazakos](https://github.com/ekazakos).
-
-## Citing
-
-When using this code, kindly reference:
-
+We have taken code from:
+- Original SlowFast [repo](https://github.com/facebookresearch/SlowFast) 
 ```
 @ARTICLE{Damen2020RESCALING,
    title={Rescaling Egocentric Vision},
@@ -34,81 +24,31 @@ and
   year =         {2020}
 }
 ```
+- A SlowFast repo trained on EPIC-KITCHENS [repo](https://github.com/epic-kitchens/epic-kitchens-slowfast/tree/master/slowfast/models)
 
+## Download EPIC-KITCHENS
+- From [here](https://github.com/epic-kitchens/epic-kitchens-download-scripts)
 
-## Pretrained model
+`python epic_downloader.py --rgb-frames --masks`
 
-You can download our pretrained model on EPIC-KITCHENS-100 from [this link](https://www.dropbox.com/s/uxb6i2xkn91xqzi/SlowFast.pyth?dl=0)
+WARNING: download each participant separately, expect 1-2 days to download the entire dataset. 
+- Original annotations from [here](https://github.com/epic-kitchens/epic-kitchens-100-annotations)
 
-## Preparation
+## Download other necessary files
+- Pretrained model `gdown --id 1cF9MlU7YhGTXn5KZVTklSYc1oypjUeaK`
+- Annotations separate by participants and video ids (processed ourselves) `gdown --id 1yeMFdejhz-1l439SSZBwNz9n0iAc5sLP`
+- Processed bounding box annotations `gdown --id `
 
-- Please install all the requirements found in the original SlowFast repo ([link](https://github.com/facebookresearch/SlowFast/blob/master/INSTALL.md))
-* Add this repository to $PYTHONPATH.
-```
-export PYTHONPATH=/path/to/SlowFast/slowfast:$PYTHONPATH
-```
-* From the annotation repository of EPIC-KITCHENS-100 ([link](https://github.com/epic-kitchens/epic-kitchens-100-annotations)), download: EPIC_100_train.pkl, EPIC_100_validation.pkl, and EPIC_100_test_timestamps.pkl. EPIC_100_train.pkl and EPIC_100_validation.pkl will be used for training/validation, while EPIC_100_test_timestamps.pkl will be used to obtain the scores to submit in the AR challenge.
-* Download only the RGB frames of EPIC-KITCHENS-100 dataset using the download scripts found [here](https://github.com/epic-kitchens/epic-kitchens-download-scripts). 
-The training/validation code expects the following folder structure for the dataset:
-```
-├── dataset_root
-|   ├── P01
-|   |   ├── rgb_frames
-|   |   |   |    ├── P01_01
-|   |   |   |    |    ├── frame_0000000000.jpg
-|   |   |   |    |    ├── frame_0000000001.jpg
-|   |   |   |    |    ├── .
-|   |   |   |    |    ├── .
-|   |   |   |    |    ├── .
-|   |   |   |    .    
-|   |   |   |    .    
-|   |   |   |    .
-|   ├── .
-|   ├── .
-|   ├── .
-|   ├── P37
-|   |   ├── rgb_frames
-|   |   |   |    ├── P37_101
-|   |   |   |    |    ├── frame_0000000000.jpg
-|   |   |   |    |    ├── frame_0000000001.jpg
-|   |   |   |    |    ├── .
-|   |   |   |    |    ├── .
-|   |   |   |    |    ├── .
-|   |   |   |    .    
-|   |   |   |    .    
-|   |   |   |    .
-```
-So, after downloading the dataset navigate under <participant_id>/rgb_frames for each participant and untar each video's frames in its corresponding folder, e.g for P01_01.tar you should create a folder P01_01 and extract the contents of the tar file inside.
+## Example scripts
 
-## Training/validation
-To train the model run:
+### Finetuning:
 ```
-python tools/run_net.py --cfg configs/EPIC-KITCHENS/SLOWFAST_8x8_R50.yaml NUM_GPUS num_gpus 
-OUTPUT_DIR /path/to/output_dir EPICKITCHENS.VISUAL_DATA_DIR /path/to/dataset 
-EPICKITCHENS.ANNOTATIONS_DIR /path/to/annotations
-```
-To validate the model run:
-```
-python tools/run_net.py --cfg configs/EPIC-KITCHENS/SLOWFAST_8x8_R50.yaml NUM_GPUS num_gpus 
-OUTPUT_DIR /path/to/experiment_dir EPICKITCHENS.VISUAL_DATA_DIR /path/to/dataset 
-EPICKITCHENS.ANNOTATIONS_DIR /path/to/annotations TRAIN.ENABLE False TEST.ENABLE True 
-TEST.CHECKPOINT_FILE_PATH /path/to/experiment_dir/checkpoints/checkpoint_best.pyth
-```
-After tuning the model's hyperparams using the validation set, we train the model that will be used for obtaining the test set's scores on the concatenation of the training and validation sets. To train the model on the concatenation of the training and validation sets run:
-```
-python tools/run_net.py --cfg configs/EPIC-KITCHENS/SLOWFAST_8x8_R50.yaml NUM_GPUS num_gpus 
-OUTPUT_DIR /path/to/output_dir EPICKITCHENS.VISUAL_DATA_DIR /path/to/dataset 
-EPICKITCHENS.ANNOTATIONS_DIR /path/to/annotations EPICKITCHENS.TRAIN_PLUS_VAL True
-```
-To obtain scores on the test set (using the model trained on the concatenation of the training and validation sets) run:
-```
-python tools/run_net.py --cfg configs/EPIC-KITCHENS/SLOWFAST_8x8_R50.yaml NUM_GPUS num_gpus 
-OUTPUT_DIR /path/to/experiment_dir EPICKITCHENS.VISUAL_DATA_DIR /path/to/dataset 
-EPICKITCHENS.ANNOTATIONS_DIR /path/to/annotations TRAIN.ENABLE False TEST.ENABLE True 
-TEST.CHECKPOINT_FILE_PATH /path/to/experiment_dir/checkpoints/checkpoint_best.pyth 
-EPICKITCHENS.TEST_LIST EPIC_100_test_timestamps.pkl EPICKITCHENS.TEST_SPLIT test
+CUDA_VISIBLE_DEVICES=0,1,2,3 PYTHONPATH=[PATH TO YOUR RoiSlowFast CODE] python tools/run_net.py --cfg [PATH TO YOUR RoiSlowFast CODE]/epic_config/ALPHA_4_BETA_8_ALL_BBOX_LOCAL_DATASET.yaml --init_method tcp://localhost:[LOCALHOST-NUMBER OF YOUR CHOICE] NUM_GPUS [NUMBER OF GPUS AVAILABLE] OUTPUT_DIR [OUTPUT DIRECTORY PATH TO SAVE CHECKPOINTS] ENABLE_WANDB False EPICKITCHENS.ROI_BRANCH 3 EPICKITCHENS.VISUAL_DATA_DIR [EPIC-KITCHENS BASE DIRECTORY/EPIC-KITCHENS] EPICKITCHENS.ANNOTATIONS_DIR [DIRECTORY THAT CONTAINS DOWNLOADED ANNOTATIONS/epic-annotations] EPICKITCHENS.BBOX_ANNOTATIONS_DIR [DIRECTORY THAT CONTAINS DOWNLOADED BOUNDING BOX ANNOTATIONS/epic-annotations] EPICKITCHENS.TEST_LIST annotations_slowfast_val2.pkl EPICKITCHENS.TRAIN_LIST annotations_slowfast_train2.pkl EPICKITCHENS.VAL_LIST annotations_slowfast_val2.pkl EPICKITCHENS.SLOWFAST_PRETRAIN_CHECKPOINT_FILE_PATH [DOWNLOADED CHECKPOINTED MODEL PATH]
+
 ```
 
-## License 
+### Testing:
+```
+CUDA_VISIBLE_DEVICES=0,1,2,3 PYTHONPATH=[PATH TO YOUR RoiSlowFast CODE] python tools/run_net.py --cfg [PATH TO YOUR RoiSlowFast CODE]/epic_config/ALPHA_4_BETA_8_ALL_BBOX_LOCAL_DATASET.yaml --init_method tcp://localhost:[LOCALHOST-NUMBER OF YOUR CHOICE] TRAIN.ENABLE False TEST.ENABLE True TEST.NUM_ENSEMBLE_VIEWS 8 NUM_GPUS [NUMBER OF GPUS AVAILABLE] OUTPUT_DIR [OUTPUT DIRECTORY PATH THAT HAS THE SAVED CHECKPOINTS] ENABLE_WANDB False EPICKITCHENS.ROI_BRANCH 3 EPICKITCHENS.VISUAL_DATA_DIR [EPIC-KITCHENS BASE DIRECTORY/EPIC-KITCHENS] EPICKITCHENS.ANNOTATIONS_DIR [DIRECTORY THAT CONTAINS DOWNLOADED ANNOTATIONS/epic-annotations] EPICKITCHENS.BBOX_ANNOTATIONS_DIR [DIRECTORY THAT CONTAINS DOWNLOADED BOUNDING BOX ANNOTATIONS/epic-annotations] EPICKITCHENS.TEST_LIST annotations_slowfast_val2.pkl EPICKITCHENS.TRAIN_LIST annotations_slowfast_train2.pkl EPICKITCHENS.VAL_LIST annotations_slowfast_val2.pkl EPICKITCHENS.SLOWFAST_PRETRAIN_CHECKPOINT_FILE_PATH [DOWNLOADED CHECKPOINTED MODEL PATH]
 
-The code is published under the Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License, found [here](https://creativecommons.org/licenses/by-nc-sa/4.0/).
+```
