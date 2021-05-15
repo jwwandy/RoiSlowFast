@@ -80,9 +80,11 @@ Region Proposal Input
  
     <h1>Task: Action Segmentation</h1>
     <ul style="padding-left:130px">
-    <li style="text-align:left"> Task: For each frame in an untrimmed video, assign a verb class label to the frame</li>
-    <li style="text-align:left"> Training and Testing input: A set of frames corresponding to an untrimmed video, each frame is annotated with a verb class label</li> 
-    <li style="text-align:left"> Evaluation metrics:F1 score at overlapping threshold of 50% over the input video </li>    
+    <li style="text-align:left"> Improve representation of learned feature by attending to region of interests during training</li>
+    <li style="text-align:left"> Evaluate the quality of learned features through Action Segmentation task</li> 
+    <li style="text-align:left"> Training Task: Given a trimmed video segment, assign a verb label to the input segment</li>
+    <li style="text-align:left"> Evaluation Task: For each frame in an untrimmed video, assign a verb class label to the frame</li>
+    <li style="text-align:left"> Metrics: F1 score at overlapping threshold of 50% over the input video</li>
     </ul>
 
     <img style="width: 80%;" src="./resources/task.png" alt="mstcn dilated" class="center"/>
