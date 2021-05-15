@@ -230,7 +230,7 @@ class Epickitchens(torch.utils.data.Dataset):
             fast_bboxs = bboxs.copy()
             fast_mask = mask.copy()
             
-            if self.cfg.EPICKITCHENS.ROI_BRANCH == 1 or self.cfg.EPICKITCHENS.ROI_BRANCH == 4:
+            if self.cfg.EPICKITCHENS.ROI_BRANCH == 1 or self.cfg.EPICKITCHENS.ROI_BRANCH == 4 or self.cfg.EPICKITCHENS.ROI_BRANCH == 6:
                 all_bboxs = [torch.FloatTensor(fast_bboxs)]
                 all_masks = [torch.FloatTensor(fast_mask)]
             else:

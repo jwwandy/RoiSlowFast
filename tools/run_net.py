@@ -84,6 +84,7 @@ def load_config(args):
         cfg.merge_from_file(args.cfg_file)
     # Load config from command line, overwrite config from opts.
     if args.opts is not None:
+        print(args.opts)
         cfg.merge_from_list(args.opts)
 
     # Inherit parameters from args.

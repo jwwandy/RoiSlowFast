@@ -175,6 +175,8 @@ class SlowFastBbox(nn.Module):
             roi_type = [[0],[0,1]]
         elif cfg.EPICKITCHENS.ROI_BRANCH == 5:
             roi_type = [[0,1],[0,1]]
+        else:
+            roi_type = [[0],[0]]
         
         dim_in = [cfg.RESNET.WIDTH_PER_GROUP * 32] * len(roi_type[0]) + [cfg.RESNET.WIDTH_PER_GROUP * 32 // cfg.SLOWFAST.BETA_INV] * len(roi_type[1])
         

@@ -57,6 +57,9 @@ def perform_test(test_loader, model, test_meter, cfg):
     for cur_iter, output_dict in enumerate(test_loader):
         if cur_iter % 100 == 0:
             logger.info("Testing iter={}".format(cur_iter))
+        
+        # if (cur_iter+1) % 1000 == 0:
+        #     test_meter_preds, test_meter_labels, test_meter_metadata = test_meter.finalize_metrics()
     
         inputs = output_dict['inputs']
         labels = output_dict['label'] 
@@ -301,7 +304,7 @@ def test(cfg, cnt=-1):
     # Build the video model and print model statistics.
     model = build_model(cfg)
     if cfg.EPICKITCHENS.USE_BBOX:
-        model.load_weight_slowfast()
+        model.module.load_weight_slowfast()
 
     # if du.is_master_proc():
     #     misc.log_model_info(model, cfg, is_train=False)
