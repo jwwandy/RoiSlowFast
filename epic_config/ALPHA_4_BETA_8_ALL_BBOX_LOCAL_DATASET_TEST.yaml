@@ -59,9 +59,9 @@ MODEL:
 TEST:
   ENABLE: True
   DATASET: epickitchens
-  BATCH_SIZE: 4
+  BATCH_SIZE: 8
   NUM_SPATIAL_CROPS: 1
-  NUM_ENSEMBLE_VIEWS: 5
+  NUM_ENSEMBLE_VIEWS: 8
 DATA_LOADER:
   NUM_WORKERS: 0
   PIN_MEMORY: True
@@ -69,8 +69,8 @@ EPICKITCHENS:
   TRAIN_PLUS_VAL: False
   VISUAL_DATA_DIR: '/raid/xiaoyuz1/EPIC/EPIC-KITCHENS' 
   ANNOTATIONS_DIR: '/raid/xiaoyuz1/EPIC/epic-annotations' 
-  BBOX_ANNOTATIONS_DIR: '/raid/xiaoyuz1/EPIC/epic-bbox-annotations/all' 
-  TEST_LIST: 'annotations_train_P14_09.pkl' 
+  BBOX_ANNOTATIONS_DIR: '/raid/xiaoyuz1/EPIC/epic-bbox-annotations/all_filled_in' 
+  TEST_LIST: 'annotations_slowfast_train2_val2.pkl'
   TRAIN_LIST : 'annotations_slowfast_train2.pkl'
   VAL_LIST : 'annotations_slowfast_val2.pkl'
   USE_BBOX: True

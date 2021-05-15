@@ -18,7 +18,7 @@ import slowfast.utils.metrics as metrics
 import slowfast.utils.misc as misc
 from slowfast.datasets import loader
 from slowfast.models import build_model
-from slowfast.utils.meters import AVAMeter, TrainMeter, ValMeter, EPICTrainMeter, EPICValMeter
+from slowfast.utils.meters import AVAMeter, TrainMeter, ValMeter, EPICTrainMeter, EPICValMeter, EPICTrainMeterSimple, EPICValMeterSimple
 from train_epoch import train_epoch
 from val_epoch import eval_epoch
 from test_net import test_from_train
@@ -151,6 +151,8 @@ def train(cfg):
     if cfg.TRAIN.DATASET != 'epickitchens' or not cfg.EPICKITCHENS.TRAIN_PLUS_VAL:
         train_loader = loader.construct_loader(cfg, "train")
         val_loader = loader.construct_loader(cfg, "val")
+        logger.info("Train loader size: {}".format(len(train_loader)))
+        logger.info("Val loader size: {}".format(len(val_loader)))
     else:
         train_loader = loader.construct_loader(cfg, "train+val")
         val_loader = loader.construct_loader(cfg, "val")
@@ -161,8 +163,8 @@ def train(cfg):
         val_meter = AVAMeter(len(val_loader), cfg, mode="val")
     else:
         if cfg.TRAIN.DATASET == 'epickitchens':
-            train_meter = EPICTrainMeter(len(train_loader), cfg)
-            val_meter = EPICValMeter(len(val_loader), cfg)
+            train_meter = EPICTrainMeterSimple(len(train_loader), cfg)
+            val_meter = EPICValMeterSimple(len(val_loader), cfg)
         else:
             train_meter = TrainMeter(len(train_loader), cfg)
             val_meter = ValMeter(len(val_loader), cfg)
@@ -193,5 +195,5 @@ def train(cfg):
             is_best_epoch = eval_epoch(val_loader, model, val_meter, cur_epoch, cfg, cnt)
             if is_best_epoch:
                 cu.save_checkpoint(cfg.OUTPUT_DIR, model, optimizer, cur_epoch, cfg, is_best_epoch=is_best_epoch)
-            test_from_train(model, cfg, cnt=cnt)
+            # test_from_train(model, cfg, cnt=cnt)
 
