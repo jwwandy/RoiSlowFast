@@ -1,0 +1,192 @@
+<script src="http://www.google.com/jsapi" type="text/javascript"></script>
+<script type="text/javascript">google.load("jquery", "1.3.2");</script>
+<link href="https://fonts.googleapis.com/css2?family=Open+Sans&display=swap"
+      rel="stylesheet">
+<link rel="stylesheet" type="text/css" href="./resources/style.css" media="screen"/>
+
+<html lang="en">
+<head>
+	<title>Improving Action Segmentation Through 
+Region of Interests</title>
+    <!-- Facebook automatically scrapes this. Go to https://developers.facebook.com/tools/debug/
+        if you update and want to force Facebook to re-scrape. -->
+	<meta property="og:image" content="Path to my teaser.jpg"/>
+	<meta property="og:title" content="Improving Action Segmentation Through 
+Region Proposal Input" />
+	<meta property="og:description" content="Paper description." />
+    <!-- Twitter automatically scrapes this. Go to https://cards-dev.twitter.com/validator?
+        if you update and want to force Twitter to re-scrape. -->
+    <meta property="twitter:card"          content="summary" />
+    <meta property="twitter:title"         content="Improving Action Segmentation Through 
+Region Proposal Input" />
+    <meta property="twitter:description"   content="Paper description." />
+    <meta property="twitter:image"         content="Path to my teaser.jpg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+</head>
+
+<body>
+<div class="container">
+    <div class="title">
+        Improving Action Segmentation Through 
+Region Proposal Input
+    </div>
+
+    <div class="venue">
+        16-824 Visual Learning and Recognition 
+    </div>
+
+    <br><br>
+
+    <div class="author">
+        Tiffany Ma
+    </div>
+    <div class="author">
+        Erin Zhang
+    </div>
+    <div class="author">
+        Andy Wei
+    </div>
+
+    <br><br>
+    <div class="links"><a href="https://github.com/ErinZhang1998/RoiSlowFast">[Code]</a></div>
+
+    <br><br>
+    <hr>
+
+    <h1>Introduction</h1>
+    <p style="width: 80%;">
+        &emsp; &emsp;In this project, we focused on the task of action segmentation on Epic-Kitchens Dataset. Given an untrimmed video, the task aims to segment the video into a series of actions, with each of them represented as a tuple containing the start frame, the end frame, and the predefined action class label. 
+    </p>
+    <p style="width: 80%;">
+        &emsp; &emsp;We followed the pipeline of MSTCN[1] for action segmentation. MSTCN, multi-stage temporal convolution network, contains stacked stages of dilated temporal convolution units. The input of the model is the pre-extracted frame by frame deep convolutional features. The output of each stage is the action segmentation results. With MSTCN as our baseline, we aimed to enhance the segmentation results with the following modification:
+    </p>
+
+    <ul style="padding-left:130px">
+    <li style="text-align:left"> We applied SlowFast[2] achitecture to extract high frame rate and low frame rate simultaneously as input features of MSTCN pipeline</li>
+    <li style="text-align:left"> We applied ROIAlign[4] on target actions regions for input features of MSTCN pipeline</li>    
+    </ul>
+    <hr>
+    <h1>Dataset: EPIC-KITCHEN 100</h1>
+    <ul style="padding-left:130px">
+    <li style="text-align:left"> Contains total of 100 hours of recording, 97 verb classes, and 300 noun classes</li>
+    <li style="text-align:left"> Recording from egocentric view on unscripted kitchen events</li> 
+    <li style="text-align:left"> Larger and more complex than other cooking action segmentation datasets </li>    
+    </ul>
+    <div class="video-container">
+        <iframe width="560" height="315" src="https://www.youtube.com/embed/6ufsOAUqfcQ" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+    </div>
+
+ 
+    <h1>Task: Action Segmentation</h1>
+    <ul style="padding-left:130px">
+    <li style="text-align:left"> Task: For each frame in an untrimmed video, assign a verb class label to the frame</li>
+    <li style="text-align:left"> Training and Testing input: A set of frames corresponding to an untrimmed video, each frame is annotated with a verb class label</li> 
+    <li style="text-align:left"> Evaluation metrics:F1 score at overlapping threshold of 50% over the input video </li>    
+    </ul>
+
+    <img style="width: 80%;" src="./resources/task.png" alt="mstcn dilated" class="center"/>
+    <hr>
+    
+    <h1>Related Works</h1>
+    <p style="width: 80%;">
+    Our work is mainly based on MSTCN++[3] and SlowFast[2] Architecture.
+    </p>
+ 
+    <h3 style="text-align:center">Multi-Stage Temporal Convolution Network for Action Segmentation</h3>
+        <p style="width: 80%;">
+        &emsp; &emsp; As shown in the left figure below, MSTCN++ uses stacked stages of temporal convolutions to segment videos into actions. Each stage output the action segmentation of the untrimmed videos. The output of previous stage is used as the input of the following stage, with the pre-extracted frame by frame features being the first stage input. With multi-stage dilated temporal convolutions, the model sucessfully captures both long-term and short-term dependecies of videos for action segmentation.
+        </p>
+        <p style="width: 80%;">
+        &emsp; &emsp; Details of the each stage of MSTCN++ is shown in the right figure below. It consists of two part, the prediction generation and refinement stage. The prediction generation stage outputs the first stage prediction L<sub>1</sub> using L dilated residual temporal convolution blocks. For the l<sup>th</sup> block, the input is passed through a dilated convolution with 2<sup>L-1</sup> dilation and a dilated convolution with 2<sup>l</sup> dilation in parallel, and two outputs are fused with addition followed by a 1 by 1 convolution. In practice, L is equal to 11. Followed by the prediction generation stage are N<sub>r</sub> refinement stages. For the i<sup>th</sup> refinement stage, the input is previous stage action segmentation prediction L<sub>i-1</sub>. 10 dilated residual temporal convolution blocks with increasing dilation are used to predict the current stage action segmentaiton output L<sub>i</sub>. An action segmentation loss function is applied on the each stage output. The loss applied on each stage output L<sub>i</sub> is the cross-entropy bewteen target label and prediction action label for each frame. The total loss is the sum over all frames in the videos.
+        </p>
+        <img style="width: 30%;" src="./resources/mstcn1.png" alt="mstcn pipeline" class="center"/>
+        <img style="width: 40%;" src="./resources/mstcn-dilated.png" alt="mstcn dilated" class="center"/>
+    <h3 style="text-align:center">SlowFast Network for Feature Extraction</h3>
+        <p style="width: 80%;">
+        &emsp; &emsp; The feature extractor we used was SlowFast. The network aims to capture motion features with different temporal resolutions simultaneously, resulting in a two-branches architecture. The architecture is presented on the left. It contains two pathways: the top pathway has lower frame rate but has a larger channel size, indicating a richer spatial information. The bottom pathway contains inputs at a higher temporal frame rate. Inspired by the ablation study performed by the author, we want to tune the extracted features to assist in the action segmentation task by focusing on action-related aspects such as object of interest and the human parts that are performing the action.         
+    </p>
+        <img style="width: 50%;" src="./resources/slowfast.png" alt="slowfast" class="center"/>
+        <img style="width: 40%;" src="./resources/slowfast-ablation.png" alt="slowfast-ablation" class="center"/>
+
+    <br><br>
+    <hr>
+    
+    
+    <h1>Approach</h1>
+    <p style="width: 80%;">
+    Our approach followed the MSTCN pipeline, which took a pre-extracted convolutional feature as inputs and passed through stacked stages of dilated temporal convolutions. Detailed steps are described below.
+    </p>
+    <img style="width: 80%;" src="./resources/Approach_1.png" alt="approach" class="center"/>
+
+
+    <ol style="padding-left:130px; padding-right:130px;">
+        
+    <li style="text-align:left"> Feature extraction using SlowFast network</li>
+        <ul>
+            <li style="text-align:left">ResNet backbone </li> 
+            <li style="text-align:left">Lateral connection (time-strided convolution) merging Fast into Slow pathway</li>   
+            <li style="text-align:left">Apply RoiAlign selectively on output of ResNet backbone using EPIC-KITCHENS provided bounding box annotation</li>   
+            
+        </ul>
+    <li style="text-align:left"> Temporally, extract features using above actecture by sliding a 32-frame window along the video frames, each 4 frames apart (~12.5fps)</li> 
+    <li style="text-align:left"> Run MSTCN on extracted features</li>    
+    </ol>
+
+    
+    <br>
+
+    <h1>Experiments & Results</h1>
+
+    
+    <h3 style="text-align:center">Design of ROIAlign Head with SlowFast Features</h3>
+    <p style="width: 80%;">
+    We experimented different heads for extracted features from SlowFast network, depicted as Type A to Type E in the left figure below. The right figure is the ROIAlign component. 
+    </p>
+    <img style="width: 45%;" src="./resources/Approach_2.png" alt="approach2" class="center"/>
+    <img style="width: 45%;" src="./resources/Approach_3.png" alt="approach3" class="center"/>
+    <img style="width: 80%;" src="./resources/result_1.png" alt="result1" class="center"/>
+    <ul style="padding-left:130px; padding-right:130px;">
+        
+    <li style="text-align:left"> Poor performance of Type-B head shows that the slow pathway, which contains rich spatial information due to its large channel size, needs full image information, and applying RoIAlign limits its representation significantly</li>
+    <li style="text-align:left"> The similar performance between Type-A head and basic head without any RoiAlign shows that the fast pathway, like stated in the original SlowFast paper, contributes little to spatial representation of the video clip. Comparing Type-A and Type-B head, we see that spatial information extracted from full image through the slow pathway is crucial in action recognition</li> 
+    <li style="text-align:left"> RoiAlign does not boost or hinder SlowFast performance, and this shows that context that does not include the actively manipulated objects is crucial to action recognition. Intuitively, to determine an action, such as “open”, the context change between frames plays an important role, and singling out the objects does not aid in prediction</li>    
+    </ul>
+    <h3 style="text-align:center">Improve video features with SlowFast Network</h3>
+    <p style="width: 80%;">
+    We futher did an ablation study on feature extraction using SlowFast Network comparing to original I3D features as input of MSTCN. SlowFast features work better at longer segments in comparison to I3D features, but it cannot handle very short segments.
+    </p>
+    <img style="width: 60%;" src="./resources/result_2.png" alt="result2" class="center"/>
+
+    <br><br>
+    <hr>
+    <h1>References</h1>
+    <p style="width: 80%;">
+    [1]Yazan Abu Farha, Juergen Gall. MS-TCN: Multi-Stage Temporal Convolutional Network for Action Segmentation, CVPR 2019.
+    </p>
+    <p style="width: 80%;">
+    [2]Christoph Feichtenhofer, Haoqi Fan, Jitendra Malik, and Kaiming He. Slowfast networks forvideo recognition, Arxiv 2019.
+    </p>
+    <p style="width: 80%;">
+    [3]Shijie Li, Yazan Abu Farha, Yun Liu, Ming-Ming Cheng, Juergen Gall. MS-TCN++: Multi-Stage Temporal Convolutional Network for Action Segmentation, TPAMI 2020.
+    </p>
+    <p style="width: 80%;">
+    [4]Kaiming He, Georgia Gkioxari, Piotr Dollár, Ross Girshick. Mask R-CNN, ICCV 2017.
+    </p>
+    <br><br>
+    <hr>
+    <h1>Acknowledgements</h1>
+    <p style="width: 80%;">
+        This template was originally made by <a href="http://web.mit.edu/phillipi/">Phillip Isola</a>
+        and <a href="http://richzhang.github.io/">Richard Zhang</a> for a
+        <a href="http://richzhang.github.io/colorization/">colorful</a> ECCV project, and
+        adapted to be mobile responsive by <a href="https://github.com/jasonyzhang/webpage-template">Jason Zhang</a>.
+        The code can be found <a href="https://github.com/elliottwu/webpage-template">here</a>.
+    </p>
+
+    <br><br>
+</div>
+
+</body>
+
+</html>
