@@ -54,6 +54,13 @@ Region Proposal Input
     <br><br>
     <hr>
 
+    <h1>Presentation</h1>
+    <div class="video-container">
+        <iframe src="" frameBorder="0"
+                allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture"
+                allowfullscreen></iframe>
+    </div>
+    <hr>
     <h1>Introduction</h1>
     <p style="width: 80%;">
         &emsp; &emsp;In this project, we focused on the task of action segmentation on Epic-Kitchens Dataset. Given an untrimmed video, the task aims to segment the video into a series of actions, with each of them represented as a tuple containing the start frame, the end frame, and the predefined action class label. 
@@ -62,7 +69,7 @@ Region Proposal Input
         &emsp; &emsp;We followed the pipeline of MSTCN[1] for action segmentation. MSTCN, multi-stage temporal convolution network, contains stacked stages of dilated temporal convolution units. The input of the model is the pre-extracted frame by frame deep convolutional features. The output of each stage is the action segmentation results. With MSTCN as our baseline, we aimed to enhance the segmentation results with the following modification:
     </p>
 
-    <ul style="padding-left:130px">
+    <ul style="padding-left:130px;padding-right:130px;">
     <li style="text-align:left"> We applied SlowFast[2] achitecture to extract high frame rate and low frame rate simultaneously as input features of MSTCN pipeline</li>
     <li style="text-align:left"> We applied ROIAlign[4] on target actions regions for input features of MSTCN pipeline</li>    
     </ul>
@@ -161,6 +168,12 @@ Region Proposal Input
     <img style="width: 60%;" src="./resources/result_2.png" alt="result2" class="center"/>
 
     <br><br>
+
+    <h1>Future Directions</h1>
+    <ul style="padding-left:130px">
+    <li style="text-align:left"> Using object detectors before SlowFast to extract region of interests instead of using EPIC-KITCHENS ground truth</li>
+    <li style="text-align:left"> Include non-local blocks in SlowFast to related region of interests across the temporal dimension</li> 
+    </ul>
     <hr>
     <h1>References</h1>
     <p style="width: 80%;">
